@@ -95,6 +95,12 @@ export default function Home() {
     }
   };
 
+  const handleFloatingPayment = () => {
+    if (cart.length > 0) {
+      setIsPaymentModalOpen(true);
+    }
+  };
+
   const handlePaymentComplete = () => {
     setCart([]);
   };
@@ -204,7 +210,11 @@ export default function Home() {
 
       {/* Sticky Cart Footer - Mobile only */}
       <div className="lg:hidden">
-        <StickyCartFooter items={cart} onOpenCart={() => setIsCartDrawerOpen(true)} />
+        <StickyCartFooter 
+          items={cart} 
+          onOpenCart={() => setIsCartDrawerOpen(true)} 
+          onPayment={handleFloatingPayment} 
+        />
       </div>
 
       {/* Cart Drawer - Mobile only */}

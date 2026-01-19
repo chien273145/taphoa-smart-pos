@@ -6,9 +6,10 @@ import { CartItem } from "@/lib/types";
 interface StickyCartFooterProps {
   items: CartItem[];
   onOpenCart: () => void;
+  onPayment: () => void;
 }
 
-export default function StickyCartFooter({ items, onOpenCart }: StickyCartFooterProps) {
+export default function StickyCartFooter({ items, onOpenCart, onPayment }: StickyCartFooterProps) {
   const [isMounted, setIsMounted] = useState(false);
 
   // Handle hydration
@@ -26,9 +27,22 @@ export default function StickyCartFooter({ items, onOpenCart }: StickyCartFooter
               <span className="text-sm text-gray-600">Đang tải...</span>
             </div>
           </div>
-          <button className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold">
+        <div className="flex gap-2">
+          <button 
+            onClick={onOpenCart}
+            className="flex-1 bg-gray-600 text-white px-3 py-2 rounded-lg font-bold"
+          >
             Giỏ hàng
           </button>
+          {items.length > 0 && (
+            <button
+              onClick={onPayment}
+              className="flex-1 bg-green-500 text-white px-3 py-2 rounded-lg font-bold"
+            >
+              Thanh toán
+            </button>
+          )}
+        </div>
         </div>
       </div>
     );
