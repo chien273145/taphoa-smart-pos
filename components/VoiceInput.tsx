@@ -11,10 +11,12 @@ interface VoiceInputProps {
 export default function VoiceInput({ onProductFound }: VoiceInputProps) {
   const { isListening, isSupported, startListening, stopListening, speak, transcript } = useVoiceAssistant();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processedTranscript, setProcessedTranscript] = useState("");
 
   useEffect(() => {
-    if (transcript && !isListening) {
+    if (transcript && !isListening && transcript !== processedTranscript) {
       setIsProcessing(true);
+      setProcessedTranscript(transcript); // Mark as processed
       
       // Search for product by name
       const product = findProductByName(transcript);
@@ -27,9 +29,8 @@ export default function VoiceInput({ onProductFound }: VoiceInputProps) {
       }
       
       setIsProcessing(false);
-      setTranscript(""); // Clear transcript after processing
     }
-  }, [transcript, isListening, onProductFound, speak]);
+  }, [transcript, isListening, onProductFound, speak, processedTranscript]);
 
   const handleVoiceInput = () => {
     if (isListening) {
