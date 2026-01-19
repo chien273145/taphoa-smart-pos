@@ -16,6 +16,68 @@ export default function MobileDebugInfo() {
     }
   });
 
+  const [isVisible, setIsVisible] = useState(true);
+
+  // Auto-hide after 10 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+    }, 10000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Basic mobile detection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isSecure = location.protocol === 'https:';
+    
+    // Camera support - check if mediaDevices and getUserMedia exist
+    const hasCamera = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+    
+    // Microphone support - check if mediaDevices and getUserMedia exist
+    const hasMicrophone = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+    
+    // Speech recognition support
+    const hasSpeechRecognition = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    
+    // Set debug info
+    setDebugInfo({
+      isMobile,
+      isSecure,
+      userAgent: navigator.userAgent,
+      hasCamera,
+      hasMicrophone,
+      hasSpeechRecognition,
+      permissions: {
+        camera: "unknown",
+        microphone: "unknown"
+      }
+    });
+  }, []);
+
+  // Check permissions on mount
+  useEffect(() => {
+    const checkInitialPermissions = async () => {
+      try {
+        const cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        const micPermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        
+        setDebugInfo(prev => ({
+          ...prev,
+          permissions: {
+            camera: cameraPermission?.state,
+            microphone: micPermission?.state
+          }
+        }));
+      } catch (err) {
+        console.log('Permission check error:', err);
+      }
+    };
+    
+    checkInitialPermissions();
+  }, []);
+
   const checkPermissions = async () => {
     try {
       // Check if mediaDevices is available
@@ -30,17 +92,16 @@ export default function MobileDebugInfo() {
         return;
       }
 
-      // Check HTTPS requirement (crucial for iOS) - allow tunnel domains
-      const isLocalhost = location.hostname === 'localhost';
+      // Check HTTPS requirement (crucial for iOS)
+      const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
       const isLocalTunnel = location.hostname.includes('.loca.lt') || 
                            location.hostname.includes('.ngrok.io') ||
                            location.hostname.includes('.ngrok-free.app') ||
                            location.hostname.includes('.tunnelto.dev');
-      const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
       
-      if (location.protocol !== 'https:' && !isLocalhost && !isLocalTunnel) {
+      if (location.protocol !== 'https:' && !isLocalTunnel && location.hostname !== 'localhost') {
         const alertMsg = isIOS 
-          ? '❌ iPhone/iPad CẦN HTTPS để truy cập camera/microphone.\n\n📝 Giải pháp:\n1. Dùng: https://taphoa-pos-3973.loca.lt\n2. Hoặc: http://localhost:3000\n3. Hoặc tạo tunnel: create-tunnel.bat'
+          ? '❌ iPhone/iPad CẦN HTTPS để truy cập camera/microphone.\n\n📝 Giải pháp:\n1. Dùng: https://taphoa-smart-pos.vercel.app\n2. Hoặc: http://localhost:3000\n3. Hoặc tạo tunnel: create-tunnel.bat'
           : '❌ Cần kết nối HTTPS để truy cập camera/microphone.\n📝 Giải pháp: Dùng HTTPS tunnel hoặc localhost';
         alert(alertMsg);
         return;
@@ -97,8 +158,6 @@ export default function MobileDebugInfo() {
         suggestion = 'Vui lòng vào Settings > Privacy & Security > Camera/Microphone và cho phép truy cập';
       } else if (errorMessage.includes('not allowed')) {
         suggestion = 'Vui lòng vào Cài đặt > Quyền riêng tư & Bảo mật > Camera/Microphone và cấp quyền';
-      } else if (errorMessage.includes('not secure')) {
-        suggestion = 'Ứng dụng cần chạy trên HTTPS để truy cập Camera/Microphone';
       } else {
         suggestion = 'Vui lòng làm mới trang và thử lại';
       }
@@ -107,122 +166,80 @@ export default function MobileDebugInfo() {
     }
   };
 
-  useEffect(() => {
-    // Basic mobile detection
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isSecure = location.protocol === 'https:';
-    
-    // Camera support - check if mediaDevices and getUserMedia exist
-    const hasCamera = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
-    
-    // Microphone support - check if mediaDevices and getUserMedia exist
-    const hasMicrophone = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
-    
-    // Speech recognition support
-    const hasSpeechRecognition = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
-    
-    // Set debug info
-    setDebugInfo({
-      isMobile,
-      isSecure,
-      userAgent: navigator.userAgent,
-      hasCamera,
-      hasMicrophone,
-      hasSpeechRecognition,
-      permissions: {
-        camera: "unknown",
-        microphone: "unknown"
-      }
-    });
-  }, []);
-
-  // Check permissions on mount
-  useEffect(() => {
-    const checkInitialPermissions = async () => {
-      try {
-        const cameraPermission = await navigator.permissions.query({ name: 'camera' });
-        const micPermission = await navigator.permissions.query({ name: 'microphone' });
-        
-        setDebugInfo(prev => ({
-          ...prev,
-          permissions: {
-            camera: cameraPermission?.state,
-            microphone: micPermission?.state
-          }
-        }));
-      } catch (err) {
-        console.error('Permission check error:', err);
-      }
-    };
-    
-    checkInitialPermissions();
-  }, []);
+  // Don't render on desktop or if hidden
+  if (!debugInfo.isMobile || !isVisible) {
+    return null;
+  }
 
   return (
-    <div className="fixed top-4 right-4 bg-yellow-100 border-2 border-yellow-300 rounded-lg p-4 max-w-sm z-50">
-      <h3 className="font-bold text-sm mb-2">🔍 Mobile Debug Info</h3>
+    <div className="fixed top-4 right-4 bg-yellow-100 border-2 border-yellow-300 rounded-lg p-3 max-w-xs z-50 shadow-lg">
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-bold text-xs">🔍 Mobile Debug</h3>
+        <button 
+          onClick={() => setIsVisible(false)}
+          className="text-gray-500 hover:text-gray-700 text-xs font-bold"
+        >
+          ✕
+        </button>
+      </div>
       
       <div className="space-y-1 text-xs">
         <div className="flex justify-between">
-          <span>Mobile:</span>
+          <span className="text-gray-700">Mobile:</span>
           <span className={debugInfo.isMobile ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.isMobile ? "✅" : "❌"}
           </span>
         </div>
         
         <div className="flex justify-between">
-          <span>HTTPS:</span>
+          <span className="text-gray-700">HTTPS:</span>
           <span className={debugInfo.isSecure ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.isSecure ? "✅" : "❌"}
           </span>
         </div>
         
         <div className="flex justify-between">
-          <span>Camera:</span>
+          <span className="text-gray-700">Camera:</span>
           <span className={debugInfo.hasCamera ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.hasCamera ? "✅" : "❌"}
           </span>
         </div>
         
         <div className="flex justify-between">
-          <span>Microphone:</span>
+          <span className="text-gray-700">Microphone:</span>
           <span className={debugInfo.hasMicrophone ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.hasMicrophone ? "✅" : "❌"}
           </span>
         </div>
         
         <div className="flex justify-between">
-          <span>Speech API:</span>
+          <span className="text-gray-700">Speech:</span>
           <span className={debugInfo.hasSpeechRecognition ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.hasSpeechRecognition ? "✅" : "❌"}
           </span>
         </div>
         
         <div className="flex justify-between">
-          <span>Camera Permission:</span>
+          <span className="text-gray-700">Camera:</span>
           <span className={debugInfo.permissions.camera === "granted" ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.permissions.camera === "granted" ? "✅" : "❌"}
           </span>
         </div>
         
         <div className="flex justify-between">
-          <span>Mic Permission:</span>
+          <span className="text-gray-700">Mic:</span>
           <span className={debugInfo.permissions.microphone === "granted" ? "text-green-600 font-bold" : "text-red-600"}>
             {debugInfo.permissions.microphone === "granted" ? "✅" : "❌"}
           </span>
         </div>
       </div>
       
-      <div className="text-center mt-2 mb-2">
-        <p className="text-xs text-gray-600 truncate">{debugInfo.userAgent}</p>
-      </div>
-      
       {/* Request permissions button */}
       <button
         onClick={checkPermissions}
-        className="w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg font-bold text-sm"
+        className="w-full bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded font-bold text-xs mt-2"
       >
-        Request Permissions
+        Check Permissions
       </button>
     </div>
   );
