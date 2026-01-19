@@ -8,6 +8,8 @@ interface VoiceInputProps {
   onProductFound: (productId: string) => void;
 }
 
+"use client";
+
 export default function VoiceInput({ onProductFound }: VoiceInputProps) {
   const { isListening, isSupported, startListening, stopListening, speak, transcript } = useVoiceAssistant();
   const [isProcessing, setIsProcessing] = useState(false);

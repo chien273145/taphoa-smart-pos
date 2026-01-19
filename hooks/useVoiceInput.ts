@@ -2,35 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
+// Types are now imported from global.d.ts
 
-interface SpeechRecognitionResultList {
-  length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
-}
+// Type declarations are now in types/global.d.ts
 
 export interface UseVoiceInputReturn {
   isListening: boolean;
@@ -50,7 +24,7 @@ export function useVoiceInput(): UseVoiceInputReturn {
   useEffect(() => {
     // Check if browser supports speech recognition
     if (typeof window !== "undefined") {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         setIsSupported(true);
         recognitionRef.current = new SpeechRecognition();
@@ -61,13 +35,13 @@ export function useVoiceInput(): UseVoiceInputReturn {
         recognitionRef.current.lang = "vi-VN"; // Vietnamese language
         
         // Handle results
-        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        recognitionRef.current.onresult = (event: any) => {
           let finalTranscript = "";
           let interimTranscript = "";
           
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
-            const transcript = result[0].transcript;
+            const transcript = result[0] ? result[0].transcript : '';
             
             if (result.isFinal) {
               finalTranscript += transcript;

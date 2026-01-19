@@ -25,12 +25,7 @@ interface SpeechRecognitionAlternative {
   confidence: number;
 }
 
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
-}
+// Type declarations are now in types/global.d.ts
 
 export interface UseVoiceAssistantReturn {
   isListening: boolean;
@@ -50,7 +45,7 @@ export function useVoiceAssistant(): UseVoiceAssistantReturn {
   useEffect(() => {
     // Check if browser supports speech recognition
     if (typeof window !== "undefined") {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         setIsSupported(true);
         recognitionRef.current = new SpeechRecognition();
