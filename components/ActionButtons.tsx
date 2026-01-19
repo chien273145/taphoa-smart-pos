@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import { Scan, Camera, CreditCard } from "lucide-react";
 import CameraView from "./CameraView";
-import VoiceSearchMobile from "./VoiceSearchMobile";
-import BarcodeScannerModal from "./BarcodeScannerModal";
+import VoiceSearch from "./VoiceSearch";
+import SimpleBarcodeScanner from "./SimpleBarcodeScanner";
 
 interface ActionButtonsProps {
   onAddToCart: (productId: string) => void;
@@ -13,24 +13,12 @@ interface ActionButtonsProps {
 }
 
 export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode }: ActionButtonsProps) {
-  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [cameraMode, setCameraMode] = useState<"barcode" | "vision" | null>(null);
   const [showCamera, setShowCamera] = useState(false);
-
-  const handleBarcodeScan = () => {
-    setShowBarcodeModal(true);
-  };
 
   const handleVisionCapture = () => {
     setCameraMode("vision");
     setShowCamera(true);
-  };
-
-  const handleBarcodeDetected = (barcode: string) => {
-    console.log("🔍 Barcode scanned:", barcode);
-    // TODO: Find product by barcode and add to cart
-    // const product = findProductByBarcode(barcode);
-    // if (product) onAddToCart(product.id);
   };
 
   const handleCameraResult = (data: string) => {
@@ -53,7 +41,6 @@ export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode
         <div className="grid grid-cols-3 gap-4 mb-4">
           {/* Quét mã vạch */}
           <button 
-            onClick={handleBarcodeScan}
             className="bg-blue-500 hover:bg-blue-600 text-white py-6 px-4 rounded-lg font-bold text-lg transition-colors flex flex-col items-center space-y-2"
           >
             <Scan className="w-8 h-8" />
@@ -73,8 +60,9 @@ export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode
 
           {/* Nói tên */}
           <div className="bg-orange-500 hover:bg-orange-600 text-white py-6 px-4 rounded-lg font-bold text-lg transition-colors flex flex-col items-center space-y-2">
-            <VoiceSearchMobile 
+            <VoiceSearch 
               onProductFound={onAddToCart} 
+              isPriceCheckMode={isPriceCheckMode}
             />
           </div>
         </div>
@@ -89,15 +77,18 @@ export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode
         </button>
       </div>
 
-      {/* Barcode Scanner Modal */}
-      <BarcodeScannerModal
-        isOpen={showBarcodeModal}
-        onClose={() => setShowBarcodeModal(false)}
-        onBarcodeDetected={handleBarcodeDetected}
+      {/* Barcode Scanner */}
+      <SimpleBarcodeScanner
+        onBarcodeDetected={(barcode: string) => {
+          console.log("🔍 Barcode scanned:", barcode);
+          // TODO: Find product by barcode and add to cart
+          // const product = findProductByBarcode(barcode);
+          // if (product) onAddToCart(product.id);
+        }}
       />
 
       {/* Camera View Modal */}
-      {showCamera && cameraMode && (
+      {showCamera && cameraMode && cameraMode === "vision" && (
         <CameraView
           mode={cameraMode}
           onCapture={handleCameraResult}
