@@ -10,9 +10,10 @@ interface SimpleBarcodeScannerProps {
 export default function SimpleBarcodeScanner({ onBarcodeDetected }: SimpleBarcodeScannerProps) {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
-  // Play beep sound when barcode detected
+  // Play beep sound when barcode detected (iOS-compatible)
   const playBeep = () => {
     try {
+      // iOS requires user interaction to play audio
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
@@ -28,6 +29,10 @@ export default function SimpleBarcodeScanner({ onBarcodeDetected }: SimpleBarcod
       oscillator.stop(audioContext.currentTime + 0.1); // 100ms beep
     } catch (err) {
       console.log('Could not play beep sound:', err);
+      // Fallback to vibration for iOS
+      if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]); // Vibrate pattern
+      }
     }
   };
 
@@ -45,11 +50,56 @@ export default function SimpleBarcodeScanner({ onBarcodeDetected }: SimpleBarcod
           playBeep();
           onBarcodeDetected(mockBarcode);
           
-          alert('Đã quét mã vạch: 8938501012345');
+          // iOS-friendly vibration
+          if (navigator.vibrate) {
+            navigator.vibrate(200); // Vibrate for 200ms
+          }
+          
+          // iOS-compatible success notification
+          showSuccessMessage('✅ Đã quét mã vạch: 8938501012345');
         }, 2000);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const showSuccessMessage = (message: string) => {
+    // Remove any existing success messages
+    const existingMessages = document.querySelectorAll('.ios-success-message');
+    existingMessages.forEach(msg => msg.remove());
+    
+    const successMessage = document.createElement('div');
+    successMessage.className = 'ios-success-message';
+    successMessage.textContent = message;
+    
+    // Apply iOS-friendly styling
+    const styles = {
+      position: 'fixed',
+      top: '20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: '#10b981',
+      color: 'white',
+      padding: '12px 20px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      zIndex: '9999',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+      fontSize: '16px',
+      maxWidth: '90vw',
+      textAlign: 'center'
+    };
+    
+    // Apply styles to the element
+    Object.assign(successMessage.style, styles);
+    document.body.appendChild(successMessage);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      if (successMessage.parentNode) {
+        successMessage.parentNode.removeChild(successMessage);
+      }
+    }, 3000);
   };
 
   const triggerCamera = () => {
@@ -61,14 +111,21 @@ export default function SimpleBarcodeScanner({ onBarcodeDetected }: SimpleBarcod
 
   return (
     <div className="relative">
-      {/* Hidden file input for camera */}
+      {/* iOS-compatible file input - use opacity instead of display:none */}
       <input
         id="camera-input"
         type="file"
         accept="image/*"
         capture="environment"
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        style={{ 
+          opacity: 0, 
+          position: 'absolute', 
+          zIndex: -1, 
+          width: '1px', 
+          height: '1px',
+          overflow: 'hidden'
+        }}
       />
 
       {/* Camera/Preview area */}

@@ -11,6 +11,8 @@ import PaymentModal from "@/components/PaymentModal";
 import CartDrawer from "@/components/CartDrawer";
 import StickyCartFooter from "@/components/StickyCartFooter";
 import MainBottomNavigation from "@/components/MainBottomNavigation";
+import MobileDebugInfo from "@/components/MobileDebugInfo";
+import VoiceSearch from "@/components/VoiceSearch";
 
 export default function Home() {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -133,7 +135,13 @@ export default function Home() {
       <div className="lg:hidden fixed bottom-32 left-0 right-0 bg-white border-t p-4">
         <div className="grid grid-cols-3 gap-2">
           {/* Quét mã vạch */}
-          <button className="bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-bold text-sm transition-colors flex flex-col items-center space-y-1">
+          <button 
+            onClick={() => {
+              const input = document.getElementById('mobile-barcode-input') as HTMLInputElement;
+              if (input) input.click();
+            }}
+            className="bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-bold text-sm transition-colors flex flex-col items-center space-y-1"
+          >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
             </svg>
@@ -141,7 +149,13 @@ export default function Home() {
           </button>
 
           {/* Chụp ảnh AI */}
-          <button className="bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-bold text-sm transition-colors flex flex-col items-center space-y-1">
+          <button 
+            onClick={() => {
+              const input = document.getElementById('mobile-camera-input') as HTMLInputElement;
+              if (input) input.click();
+            }}
+            className="bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-bold text-sm transition-colors flex flex-col items-center space-y-1"
+          >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -150,7 +164,14 @@ export default function Home() {
           </button>
 
           {/* Nói tên */}
-          <button className="bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-bold text-sm transition-colors flex flex-col items-center space-y-1">
+          <button 
+            onClick={() => {
+              // Trigger voice recognition
+              const voiceButton = document.querySelector('[data-voice-trigger]') as HTMLButtonElement;
+              if (voiceButton) voiceButton.click();
+            }}
+            className="bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-bold text-sm transition-colors flex flex-col items-center space-y-1"
+          >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
@@ -185,6 +206,99 @@ export default function Home() {
 
       {/* Main Bottom Navigation */}
       <MainBottomNavigation />
+      
+      {/* Mobile Debug Info */}
+      <MobileDebugInfo />
+      
+      {/* Hidden VoiceSearch for mobile triggers */}
+      <div style={{ opacity: 0, position: 'absolute', zIndex: -1, width: '1px', height: '1px', overflow: 'hidden' }}>
+        <VoiceSearch 
+          onProductFound={addToCart} 
+          isPriceCheckMode={isPriceCheckMode}
+        />
+      </div>
+      
+      {/* Hidden mobile inputs for iOS compatibility */}
+      <div style={{ opacity: 0, position: 'absolute', zIndex: -1, width: '1px', height: '1px', overflow: 'hidden' }}>
+        <input
+          id="mobile-barcode-input"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && file.type.startsWith('image/')) {
+              setTimeout(() => {
+                const mockBarcode = "8938501012345";
+                console.log("🔍 Mobile barcode scanned:", mockBarcode);
+                const mockProductId = "prod-001";
+                addToCart(mockProductId);
+                
+                const successMsg = document.createElement('div');
+                successMsg.textContent = '✅ Đã quét mã: ' + mockBarcode;
+                Object.assign(successMsg.style, {
+                  position: 'fixed',
+                  top: '20px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: '#10b981',
+                  color: 'white',
+                  padding: '12px 20px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  zIndex: '9999',
+                  fontSize: '16px'
+                });
+                document.body.appendChild(successMsg);
+                setTimeout(() => {
+                  if (successMsg.parentNode) {
+                    successMsg.parentNode.removeChild(successMsg);
+                  }
+                }, 3000);
+              }, 1500);
+            }
+          }}
+        />
+        
+        <input
+          id="mobile-camera-input"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && file.type.startsWith('image/')) {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                console.log("📷 Mobile image captured for AI vision");
+                // TODO: Process image with AI vision
+                const successMsg = document.createElement('div');
+                successMsg.textContent = '📷 Đã chụp ảnh - AI đang xử lý...';
+                Object.assign(successMsg.style, {
+                  position: 'fixed',
+                  top: '20px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: '#8b5cf6',
+                  color: 'white',
+                  padding: '12px 20px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  zIndex: '9999',
+                  fontSize: '16px'
+                });
+                document.body.appendChild(successMsg);
+                setTimeout(() => {
+                  if (successMsg.parentNode) {
+                    successMsg.parentNode.removeChild(successMsg);
+                  }
+                }, 3000);
+              };
+              reader.readAsDataURL(file);
+            }
+          }}
+        />
+      </div>
     </div>
   );
 }

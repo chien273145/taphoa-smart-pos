@@ -9,6 +9,7 @@ interface VoiceSearchProps {
   isPriceCheckMode?: boolean;
 }
 
+// iOS-compatible interface for Speech Recognition
 declare global {
   interface IWindow extends Window {
     webkitSpeechRecognition: any;
@@ -25,16 +26,19 @@ export default function VoiceSearch({ onProductFound, isPriceCheckMode = false }
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const { webkitSpeechRecognition, SpeechRecognition } = (window as unknown as IWindow);
-      const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition;
+      // iOS-compatible Speech Recognition initialization
+      const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
       if (SpeechRecognitionAPI) {
         setIsSupported(true);
         const recognitionInstance = new SpeechRecognitionAPI();
         setRecognition(recognitionInstance);
         
+        // Configure for iOS Safari compatibility
         recognitionInstance.continuous = false;
         recognitionInstance.interimResults = true;
         recognitionInstance.lang = "vi-VN";
+        recognitionInstance.maxAlternatives = 1;
         
         recognitionInstance.onresult = (event: any) => {
           let finalTranscript = "";
@@ -55,12 +59,16 @@ export default function VoiceSearch({ onProductFound, isPriceCheckMode = false }
         };
         
         recognitionInstance.onerror = (event: any) => {
-          console.log("Speech recognition event:", event.error);
+          console.log("Speech recognition error:", event.error);
           
           if (event.error === "no-speech") {
             console.log("No speech detected - user didn't speak or microphone issue");
+          } else if (event.error === "not-allowed") {
+            alert("❌ Microphone bị từ chối. Vui lòng vào Settings > Safari > Microphone và cho phép truy cập.");
+          } else if (event.error === "network") {
+            alert("❌ Lỗi mạng. Vui lòng kiểm tra kết nối internet và thử lại.");
           } else {
-            console.error("Speech recognition error:", event.error);
+            alert("❌ Lỗi nhận diện giọng nói: " + event.error);
           }
           
           setIsListening(false);
@@ -71,23 +79,69 @@ export default function VoiceSearch({ onProductFound, isPriceCheckMode = false }
         };
       } else {
         setIsSupported(false);
+        // More helpful error message for iOS users
+        if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
+          alert("⚠️ Trình duyệt không hỗ trợ nhận diện giọng nói.\n📝 Gợi ý: Dùng Safari trên iOS 13+ và đảm bảo đã cấp quyền Microphone.");
+        } else {
+          alert("Lỗi: Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Android.");
+        }
       }
     }
   }, []);
 
   const handleVoiceInput = () => {
     if (!isSupported) {
-      alert("Lỗi: Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Android.");
+      alert("Trình duyệt không hỗ trợ nhận diện giọng nói. Vui lòng dùng Safari trên iOS 13+ hoặc Chrome trên Android.");
       return;
     }
 
     if (isListening && recognition) {
-      recognition.stop();
+      // Use abort instead of stop for better error handling
+      try {
+        recognition.abort();
+      } catch (e) {
+        // Ignore abort errors
+      }
       setIsListening(false);
     } else {
+      // Check if we have HTTPS (required for iOS) - allow tunnel domains
+      const isLocalhost = location.hostname === 'localhost';
+      const isLocalTunnel = location.hostname.includes('.loca.lt') || 
+                           location.hostname.includes('.ngrok.io') ||
+                           location.hostname.includes('.ngrok-free.app') ||
+                           location.hostname.includes('.tunnelto.dev');
+      
+      if (location.protocol !== 'https:' && !isLocalhost && !isLocalTunnel) {
+        alert("❌ Cần kết nối HTTPS để sử dụng micro trên iOS.\n\n📝 Giải pháp:\n1. Dùng: https://taphoa-pos-3973.loca.lt\n2. Hoặc: http://localhost:3000");
+        return;
+      }
+      
+      // Force cleanup any existing recognition
+      try {
+        if (recognition) {
+          recognition.abort();
+        }
+      } catch (e) {
+        // Ignore abort errors
+      }
+      
       setTranscript("");
-      recognition.start();
-      setIsListening(true);
+      try {
+        // Small delay to ensure clean state
+        setTimeout(() => {
+          try {
+            recognition.start();
+            setIsListening(true);
+          } catch (error) {
+            console.error("Failed to start recognition:", error);
+            setIsListening(false);
+            alert("❌ Không thể khởi động nhận diện giọng nói. Vui lòng làm mới trang và thử lại.");
+          }
+        }, 100);
+      } catch (error) {
+        console.error("Failed to prepare recognition:", error);
+        alert("❌ Không thể khởi động nhận diện giọng nói. Vui lòng làm mới trang và thử lại.");
+      }
     }
   };
 
@@ -157,6 +211,7 @@ export default function VoiceSearch({ onProductFound, isPriceCheckMode = false }
         onClick={handleVoiceInput}
         className={getButtonClass()}
         disabled={!isSupported}
+        data-voice-trigger="true"
       >
         <Mic className="w-6 h-6" />
         <span>{getButtonText()}</span>

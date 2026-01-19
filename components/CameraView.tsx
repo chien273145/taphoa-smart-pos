@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useState, useRef } from "react";
 import { Camera, Scan, X } from "lucide-react";
 
@@ -52,14 +50,21 @@ export default function CameraView({ mode, onCapture, onClose }: CameraViewProps
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      {/* Hidden file input */}
+      {/* iOS-compatible file input - always rendered in DOM */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         capture="environment"
         onChange={handleFileSelect}
-        className="hidden"
+        style={{ 
+          opacity: 0, 
+          position: 'absolute', 
+          zIndex: -1, 
+          width: '1px', 
+          height: '1px',
+          overflow: 'hidden'
+        }}
       />
 
       {/* Header */}
@@ -75,7 +80,7 @@ export default function CameraView({ mode, onCapture, onClose }: CameraViewProps
         </button>
       </div>
 
-      {/* Camera/Captured Image Area */}
+      {/* Camera/Captured Image Area with iOS-compatible video element */}
       <div className="flex-1 relative bg-gray-800 flex items-center justify-center p-4">
         {capturedImage ? (
           // Show captured image with preview
@@ -104,7 +109,7 @@ export default function CameraView({ mode, onCapture, onClose }: CameraViewProps
             )}
           </div>
         ) : (
-          // Show camera placeholder
+          // Show camera placeholder with iOS-friendly instructions
           <div className="text-center">
             {mode === "barcode" ? (
               <Scan className="w-24 h-24 text-white mb-4 mx-auto" />
@@ -119,7 +124,15 @@ export default function CameraView({ mode, onCapture, onClose }: CameraViewProps
               }
             </p>
             
-            <p className="text-gray-400 text-sm">Bấm nút bên dưới để mở camera</p>
+            <p className="text-gray-400 text-sm mb-2">Bấm nút bên dưới để mở camera</p>
+            
+            {/* iOS-specific help text */}
+            <p className="text-gray-500 text-xs">
+              {navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad') 
+                ? "💡 Trên iPhone: Camera sẽ tự động mở khi bạn bấm nút" 
+                : "💡 Camera sẽ mở khi bạn bấm nút bên dưới"
+              }
+            </p>
           </div>
         )}
 
