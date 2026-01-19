@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Scan, Camera, CreditCard } from "lucide-react";
 import CameraView from "./CameraView";
 import VoiceSearch from "./VoiceSearch";
+import BarcodeScannerModal from "./BarcodeScannerModal";
 
 interface ActionButtonsProps {
   onAddToCart: (productId: string) => void;
@@ -12,12 +13,12 @@ interface ActionButtonsProps {
 }
 
 export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode }: ActionButtonsProps) {
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [cameraMode, setCameraMode] = useState<"barcode" | "vision" | null>(null);
   const [showCamera, setShowCamera] = useState(false);
 
   const handleBarcodeScan = () => {
-    setCameraMode("barcode");
-    setShowCamera(true);
+    setShowBarcodeModal(true);
   };
 
   const handleVisionCapture = () => {
@@ -25,17 +26,22 @@ export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode
     setShowCamera(true);
   };
 
+  const handleBarcodeDetected = (barcode: string) => {
+    console.log("🔍 Barcode scanned:", barcode);
+    // TODO: Find product by barcode and add to cart
+    // const product = findProductByBarcode(barcode);
+    // if (product) onAddToCart(product.id);
+  };
+
   const handleCameraResult = (data: string) => {
     setShowCamera(false);
     
-    if (cameraMode === "barcode") {
-      // Handle barcode scan result
-      console.log("Barcode scanned:", data);
-      // Here you would find product by barcode and add to cart
-    } else {
+    if (cameraMode === "vision") {
       // Handle AI vision result
-      console.log("AI vision result:", data);
-      // Here you would find product by name and add to cart
+      console.log("👁️ AI vision result:", data);
+      // TODO: Find product by name and add to cart
+      // const product = findProductByName(data);
+      // if (product) onAddToCart(product.id);
     }
     
     setCameraMode(null);
@@ -83,6 +89,13 @@ export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode
           <span>THANH TOÁN</span>
         </button>
       </div>
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={showBarcodeModal}
+        onClose={() => setShowBarcodeModal(false)}
+        onBarcodeDetected={handleBarcodeDetected}
+      />
 
       {/* Camera View Modal */}
       {showCamera && cameraMode && (
