@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CartItem } from "@/lib/types";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 
@@ -24,6 +24,12 @@ export default function CartDrawer({
   onPayment 
 }: CartDrawerProps) {
   const { speak } = useVoiceAssistant();
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Handle hydration
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const totalAmount = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
@@ -35,7 +41,7 @@ export default function CartDrawer({
     0
   );
 
-  if (!isOpen) return null;
+  if (!isOpen || !isMounted) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col">

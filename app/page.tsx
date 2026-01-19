@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { mockProducts } from "@/lib/mockData";
 import { CartItem } from "@/lib/types";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
+import { CartPersistence } from "@/lib/cartPersistence";
 import ProductGrid from "@/components/ProductGrid";
 import Cart from "@/components/Cart";
 import ActionButtons from "@/components/ActionButtons";
@@ -19,7 +20,26 @@ export default function Home() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPriceCheckMode, setIsPriceCheckMode] = useState(false);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const { speak } = useVoiceAssistant();
+
+  // Handle hydration and load cart from localStorage
+  useEffect(() => {
+    setIsMounted(true);
+    const savedCart = CartPersistence.loadCart();
+    if (savedCart.length > 0) {
+      setCart(savedCart);
+      console.log('Cart loaded from localStorage:', CartPersistence.getCartSummary(savedCart));
+    }
+  }, []);
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    if (isMounted) {
+      CartPersistence.saveCart(cart);
+      console.log('Cart saved to localStorage:', CartPersistence.getCartSummary(cart));
+    }
+  }, [cart, isMounted]);
 
   const addToCart = (productId: string) => {
     const product = mockProducts.find(p => p.id === productId);
@@ -65,6 +85,8 @@ export default function Home() {
 
   const clearCart = () => {
     setCart([]);
+    CartPersistence.clearCart();
+    console.log('Cart cleared from localStorage');
   };
 
   const handlePayment = () => {

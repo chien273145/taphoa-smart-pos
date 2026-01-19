@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { CartItem } from "@/lib/types";
 
 interface StickyCartFooterProps {
@@ -8,6 +9,31 @@ interface StickyCartFooterProps {
 }
 
 export default function StickyCartFooter({ items, onOpenCart }: StickyCartFooterProps) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Handle hydration
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Don't render until client-side hydration is complete
+  if (!isMounted) {
+    return (
+      <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 z-30 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">Đang tải...</span>
+            </div>
+          </div>
+          <button className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold">
+            Giỏ hàng
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const totalAmount = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
     0
