@@ -1,0 +1,126 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
+export interface UseVoiceInputReturn {
+  isListening: boolean;
+  isSupported: boolean;
+  transcript: string;
+  startListening: () => void;
+  stopListening: () => void;
+  resetTranscript: () => void;
+}
+
+export function useVoiceInput(): UseVoiceInputReturn {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [isSupported, setIsSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Check if browser supports speech recognition
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        setIsSupported(true);
+        recognitionRef.current = new SpeechRecognition();
+        
+        // Configure recognition
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = "vi-VN"; // Vietnamese language
+        
+        // Handle results
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+          let finalTranscript = "";
+          let interimTranscript = "";
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            
+            if (result.isFinal) {
+              finalTranscript += transcript;
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          
+          // Set the transcript (final or interim)
+          setTranscript(finalTranscript || interimTranscript);
+        };
+        
+        // Handle errors
+        recognitionRef.current.onerror = (event: any) => {
+          console.error("Speech recognition error:", event.error);
+          setIsListening(false);
+        };
+        
+        // Handle end
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      } else {
+        setIsSupported(false);
+      }
+    }
+  }, []);
+
+  const startListening = () => {
+    if (recognitionRef.current && !isListening) {
+      setTranscript(""); // Clear previous transcript
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  };
+
+  const resetTranscript = () => {
+    setTranscript("");
+  };
+
+  return {
+    isListening,
+    isSupported,
+    transcript,
+    startListening,
+    stopListening,
+    resetTranscript,
+  };
+}
