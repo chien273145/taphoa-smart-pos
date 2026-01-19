@@ -3,7 +3,46 @@
 import { useState } from "react";
 import { CartItem } from "@/lib/types";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
-import { OrderService, Order, OrderItem } from "@/lib/supabase";
+
+// Order Item Type (temporary)
+interface OrderItem {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+// Order Type (temporary)
+interface Order {
+  id?: string;
+  created_at?: string;
+  total_amount: number;
+  items: OrderItem[];
+  payment_method: string;
+  customer_info?: any;
+  status: string;
+  notes?: string;
+  updated_at?: string;
+}
+
+// Temporary order service without Supabase
+const TempOrderService = {
+  saveOrder: async (orderData: any) => {
+    // Simulate saving order
+    const orderId = `DH${Date.now().toString(36).toUpperCase().slice(0, 8)}`;
+    
+    // Show success message
+    alert(`✅ Đã lưu đơn hàng #${orderId} thành công!\n💰 Tổng: ${orderData.total_amount.toLocaleString()}đ\n📱 Mã QR: ${orderId}`);
+    
+    // Return mock order data
+    return {
+      id: orderId,
+      ...orderData,
+      created_at: new Date().toISOString()
+    };
+  }
+};
 
 // QR Code Configuration
 const BANK_ID = "MB"; // Ngân hàng MB Bank (có thể đổi)
@@ -77,8 +116,8 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
         notes: `QR Transfer - Mã đơn: ${orderId}`
       };
 
-      // Save order to Supabase
-      const savedOrder = await OrderService.saveOrder(orderData);
+      // Save order temporarily
+      const savedOrder = await TempOrderService.saveOrder(orderData);
 
       // Show success message
       alert(`✅ Đã lưu đơn hàng #${savedOrder.id?.slice(0, 8)} thành công!\n💰 Tổng: ${totalAmount.toLocaleString()}đ\n📱 Mã QR: ${orderId}`);
