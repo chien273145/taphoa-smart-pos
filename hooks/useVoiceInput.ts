@@ -82,7 +82,15 @@ export function useVoiceInput(): UseVoiceInputReturn {
         
         // Handle errors
         recognitionRef.current.onerror = (event: any) => {
-          console.error("Speech recognition error:", event.error);
+          console.log("Speech recognition event:", event.error);
+          
+          // Don't show error for "no-speech" - it's normal when user doesn't speak
+          if (event.error === 'no-speech') {
+            console.log("No speech detected - user didn't speak or microphone issue");
+          } else {
+            console.error("Speech recognition error:", event.error);
+          }
+          
           setIsListening(false);
         };
         
@@ -99,8 +107,14 @@ export function useVoiceInput(): UseVoiceInputReturn {
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       setTranscript(""); // Clear previous transcript
-      recognitionRef.current.start();
-      setIsListening(true);
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (error) {
+        console.error("Failed to start speech recognition:", error);
+        // Handle case where microphone is already in use or denied
+        setIsListening(false);
+      }
     }
   };
 

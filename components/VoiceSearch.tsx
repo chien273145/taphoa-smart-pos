@@ -24,17 +24,17 @@ export default function VoiceSearch({ onProductFound, isPriceCheckMode = false }
 
   // Process transcript when voice input ends
   useEffect(() => {
-    if (transcript && !isListening && !isProcessing) {
+    if (transcript && !isListening && !isProcessing && transcript.trim().length > 0) {
       setIsProcessing(true);
       
       // Search for product by name
       const product = findProductByName(transcript);
       
       if (product) {
-        console.log(`Tìm thấy sản phẩm: ${product.name}`);
+        console.log(`✅ Tìm thấy sản phẩm: ${product.name}`);
         onProductFound(product.id);
       } else {
-        console.log(`Không tìm thấy sản phẩm: ${transcript}`);
+        console.log(`❌ Không tìm thấy sản phẩm: "${transcript}"`);
       }
       
       // Reset after processing
@@ -81,9 +81,9 @@ export default function VoiceSearch({ onProductFound, isPriceCheckMode = false }
       </button>
       
       {/* Show transcript when listening */}
-      {transcript && (
+      {transcript && transcript.trim() && (
         <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800 text-white p-2 rounded-lg text-center z-50">
-          <p className="text-sm">Đã nghe thấy: "{transcript}"</p>
+          <p className="text-sm">Đã nghe: "{transcript}"</p>
         </div>
       )}
     </div>
