@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Scan, Camera, CreditCard } from "lucide-react";
 import CameraView from "./CameraView";
-import VoiceSearch from "./VoiceSearch";
+import VoiceSearchMobile from "./VoiceSearchMobile";
 import BarcodeScannerModal from "./BarcodeScannerModal";
 
 interface ActionButtonsProps {
@@ -73,9 +73,8 @@ export default function ActionButtons({ onAddToCart, onPayment, isPriceCheckMode
 
           {/* Nói tên */}
           <div className="bg-orange-500 hover:bg-orange-600 text-white py-6 px-4 rounded-lg font-bold text-lg transition-colors flex flex-col items-center space-y-2">
-            <VoiceSearch 
+            <VoiceSearchMobile 
               onProductFound={onAddToCart} 
-              isPriceCheckMode={isPriceCheckMode}
             />
           </div>
         </div>
