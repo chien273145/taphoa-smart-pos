@@ -1,90 +1,96 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
-import { mockProducts, findProductByName } from "@/lib/mockData";
+import { useState, useEffect, useRef } from "react";
+import { Mic, MicOff } from "lucide-react";
 
 interface VoiceInputProps {
-  onProductFound: (productId: string) => void;
+  onTranscript: (transcript: string) => void;
+  placeholder?: string;
+  className?: string;
 }
 
-"use client";
-
-export default function VoiceInput({ onProductFound }: VoiceInputProps) {
-  const { isListening, isSupported, startListening, stopListening, speak, transcript } = useVoiceAssistant();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processedTranscript, setProcessedTranscript] = useState("");
+export default function VoiceInput({ onTranscript, placeholder = "Nhấn nút mic để nói...", className = "" }: VoiceInputProps) {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const recognition = useRef<any>(null);
 
   useEffect(() => {
-    if (transcript && !isListening && transcript !== processedTranscript) {
-      setIsProcessing(true);
-      setProcessedTranscript(transcript); // Mark as processed
-      
-      // Search for product by name
-      const product = findProductByName(transcript);
-      
-      if (product) {
-        speak(`Đã thêm ${product.name}, ${product.price.toLocaleString()} đồng`);
-        onProductFound(product.id);
-      } else {
-        speak(`Không tìm thấy sản phẩm ${transcript}`);
-      }
-      
-      setIsProcessing(false);
-    }
-  }, [transcript, isListening, onProductFound, speak, processedTranscript]);
+    // Initialize speech recognition
+    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition;
+      recognition.current = new SpeechRecognition();
+      recognition.current.continuous = false;
+      recognition.current.interimResults = false;
+      recognition.current.lang = 'vi-VN';
 
-  const handleVoiceInput = () => {
+      recognition.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setTranscript(transcript);
+        onTranscript(transcript);
+        setIsListening(false);
+      };
+
+      recognition.current.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+  }, [onTranscript]);
+
+  const toggleListening = () => {
+    if (!recognition.current) {
+      alert('Trình duyệt của bác không hỗ trợ nhận diện giọng nói. Bác vui lòng dùng Chrome nhé.');
+      return;
+    }
+
     if (isListening) {
-      stopListening();
+      recognition.current.stop();
+      setIsListening(false);
     } else {
-      startListening();
+      recognition.current.start();
+      setIsListening(true);
+      setTranscript("");
     }
   };
 
-  if (!isSupported) {
-    return (
-      <button 
-        disabled
-        className="bg-gray-400 text-white py-6 px-4 rounded-lg font-bold text-lg opacity-50 cursor-not-allowed flex flex-col items-center space-y-2"
-      >
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-        </svg>
-        <span>NÓI</span>
-        <span className="text-xs">Không hỗ trợ</span>
-      </button>
-    );
-  }
-
   return (
-    <div className="relative">
-      <button
-        onClick={handleVoiceInput}
-        className={`${
-          isListening 
-            ? "bg-red-500 animate-pulse" 
-            : isProcessing 
-              ? "bg-yellow-500" 
-              : "bg-orange-500 hover:bg-orange-600"
-        } text-white py-6 px-4 rounded-lg font-bold text-lg transition-colors flex flex-col items-center space-y-2`}
-      >
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-        </svg>
-        <span>NÓI</span>
-        {isListening && (
-          <span className="text-xs animate-pulse">Đang nghe...</span>
-        )}
-        {isProcessing && (
-          <span className="text-xs">Đang xử lý...</span>
-        )}
-      </button>
+    <div className={`relative ${className}`}>
+      <div className="flex items-center space-x-3">
+        <input
+          type="text"
+          value={transcript}
+          onChange={(e) => {
+            setTranscript(e.target.value);
+            onTranscript(e.target.value);
+          }}
+          placeholder={placeholder}
+          className="flex-1 px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+        />
+        
+        <button
+          onClick={toggleListening}
+          disabled={!recognition.current}
+          className={`p-4 rounded-full transition-all ${
+            isListening 
+              ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+              : 'bg-blue-500 hover:bg-blue-600 text-white'
+          } ${!recognition.current ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          {isListening ? (
+            <MicOff className="w-6 h-6" />
+          ) : (
+            <Mic className="w-6 h-6" />
+          )}
+        </button>
+      </div>
       
-      {/* Show transcript when listening */}
-      {transcript && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-800 text-white p-2 rounded-lg text-center">
-          <p className="text-sm">{transcript}</p>
+      {isListening && (
+        <div className="mt-2 text-sm text-red-600 font-medium animate-pulse">
+          🎤 Đang nghe... Bác nói rõ ràng nhé
         </div>
       )}
     </div>

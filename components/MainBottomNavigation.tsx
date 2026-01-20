@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Package, Settings } from "lucide-react";
+import { Home, Package, Settings, BarChart3 } from "lucide-react";
 
 export default function MainBottomNavigation() {
   const pathname = usePathname();
@@ -13,6 +13,12 @@ export default function MainBottomNavigation() {
       label: "Bán hàng",
       icon: Home,
       active: pathname === "/",
+    },
+    {
+      href: "/orders",
+      label: "Doanh thu",
+      icon: BarChart3,
+      active: pathname === "/orders",
     },
     {
       href: "/import",
@@ -30,7 +36,7 @@ export default function MainBottomNavigation() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-4">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (

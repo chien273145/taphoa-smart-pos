@@ -1,251 +1,512 @@
 "use client";
 
-import React, { useState } from "react";
-import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
+import React, { useState, useEffect, useRef } from "react";
+import { ImportService, ImportHistory } from "@/lib/import";
+import { useImportVoiceAssistant } from "@/hooks/useImportVoiceAssistant";
 import MainBottomNavigation from "@/components/MainBottomNavigation";
+import VoiceInput from "@/components/VoiceInput";
+import VoiceRecorder from "@/components/VoiceRecorder";
+import BarcodeScanner from "@/components/BarcodeScanner";
+import { Camera, Upload, CheckCircle, AlertCircle } from "lucide-react";
 
 interface ImportItem {
-  name: string;
-  importPrice: number;
-  sellPrice: number;
+  product_name: string;
+  barcode?: string;
   quantity: number;
+  import_price: number;
+  supplier_name?: string;
+  image_url?: string;
+  notes?: string;
 }
 
 export default function ImportPage() {
-  const [items, setItems] = useState<ImportItem[]>([]);
+  // Form states
   const [currentItem, setCurrentItem] = useState<ImportItem>({
-    name: "",
-    importPrice: 0,
-    sellPrice: 0,
+    product_name: "",
     quantity: 1,
+    import_price: 0,
+    supplier_name: "",
+    notes: ""
   });
-  const { isListening, transcript, startListening, stopListening, speak } = useVoiceAssistant();
+  
+  // UI states
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [productImageCheck, setProductImageCheck] = useState<{
+    hasImage: boolean;
+    imageUrl?: string;
+    product?: any;
+  }>({ hasImage: false });
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  
+  // Refs for auto-focus
+  const quantityInputRef = useRef<HTMLInputElement>(null);
+  const priceInputRef = useRef<HTMLInputElement>(null);
+  const supplierInputRef = useRef<HTMLInputElement>(null);
+  const notesInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+// Voice assistant
+  const {
+    speak,
+    welcomeMessage,
+    productHasImageMessage,
+    productNeedsImageMessage,
+    quantityGuidanceMessage,
+    priceGuidanceMessage,
+    successMessage,
+    errorMessage
+  } = useImportVoiceAssistant();
 
-  // Parse voice command for import
-  const parseImportCommand = (command: string): ImportItem | null => {
-    try {
-      // Regex patterns for different command formats
-      const patterns = [
-        // "Nhập 10 thùng bia Tiger giá bán 320 nghìn"
-        /nhập\s+(\d+)\s*(?:thùng|chai|cái|lon|hộp)?\s*([^\d]+?)\s*giá\s*bán\s*(\d+(?:\.\d+)?)\s*(?:nghìn|ngàn|k|đ)?/i,
-        // "Bia Tiger 10 cái giá bán 320"
-        /([^\d]+?)\s*(\d+)\s*(?:thùng|chai|cái|lon|hộp)?\s*giá\s*bán\s*(\d+(?:\.\d+)?)/i,
-        // "Nhập bia Tiger số lượng 10 giá 320"
-        /nhập\s*([^\d]+?)\s*số\s*lượng\s*(\d+)\s*giá\s*(\d+(?:\.\d+)?)/i,
-      ];
+  // Welcome message on mount
+  useEffect(() => {
+    welcomeMessage();
+  }, [welcomeMessage]);
 
-      for (const pattern of patterns) {
-        const match = command.toLowerCase().match(pattern);
-        if (match) {
-          let quantity = parseInt(match[1]) || parseInt(match[2]) || 1;
-          let name = match[2] || match[1];
-          let price = parseFloat(match[3] || match[4]) || 0;
-
-          // Clean up product name
-          name = name.trim().replace(/\s+/g, ' ');
+  // Smart Image Check - Trigger when product name or barcode changes
+  useEffect(() => {
+    const checkProductImage = async () => {
+      if (currentItem.product_name.trim() || currentItem.barcode?.trim()) {
+        try {
+          const result = await ImportService.checkProductImage(
+            currentItem.product_name,
+            currentItem.barcode
+          );
           
-          // Handle price units
-          if (command.toLowerCase().includes('nghìn') || command.toLowerCase().includes('ngàn') || command.toLowerCase().includes('k')) {
-            price = price * 1000;
+          setProductImageCheck(result);
+          
+          // Voice guidance based on image check
+          if (result.hasImage) {
+            productHasImageMessage();
+            // Auto-focus to quantity if image exists
+            setTimeout(() => quantityInputRef.current?.focus(), 1000);
+          } else {
+            productNeedsImageMessage();
+            // Don't auto-focus, wait for image capture
           }
-
-          return {
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            importPrice: Math.round(price * 0.7), // Assume import price is 70% of sell price
-            sellPrice: Math.round(price),
-            quantity: quantity,
-          };
+        } catch (error) {
+          console.error('Error checking product image:', error);
         }
       }
+    };
 
-      return null;
-    } catch (error) {
-      console.error("Error parsing import command:", error);
-      return null;
+    const debounceTimer = setTimeout(checkProductImage, 500);
+    return () => clearTimeout(debounceTimer);
+  }, [currentItem.product_name, currentItem.barcode, productHasImageMessage, productNeedsImageMessage]);
+
+  // Handle file capture
+  const handleFileCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setCapturedImage(result);
+        setCurrentItem(prev => ({ ...prev, image_url: result }));
+        
+        // Auto-focus to quantity after image capture
+        setTimeout(() => quantityInputRef.current?.focus(), 500);
+        speak('Đã chụp ảnh xong, bác nhập số lượng nhé.');
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  // Handle voice input
-  const handleVoiceInput = () => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
+  // Handle input changes with auto-focus logic
+  const handleProductNameChange = (value: string) => {
+    setCurrentItem(prev => ({ ...prev, product_name: value }));
+  };
+
+  const handleQuantityChange = (value: string) => {
+    const quantity = parseInt(value) || 0;
+    setCurrentItem(prev => ({ ...prev, quantity }));
+    
+    // Auto-focus to price when quantity is entered
+    if (quantity > 0) {
+      setTimeout(() => priceInputRef.current?.focus(), 200);
+      quantityGuidanceMessage();
     }
   };
 
-  // Process transcript when voice input ends
-  React.useEffect(() => {
-    if (transcript && !isListening) {
-      const parsed = parseImportCommand(transcript);
-      
-      if (parsed) {
-        setCurrentItem(parsed);
-        speak(`Đã nhập ${parsed.name}, số lượng ${parsed.quantity}, giá bán ${parsed.sellPrice.toLocaleString()} đồng`);
-      } else {
-        speak("Không hiểu lệnh. Vui lòng thử lại.");
+  const handlePriceChange = (value: string) => {
+    const price = parseInt(value) || 0;
+    setCurrentItem(prev => ({ ...prev, import_price: price }));
+    
+    // Auto-focus to supplier when price is entered
+    if (price > 0) {
+      setTimeout(() => supplierInputRef.current?.focus(), 200);
+      priceGuidanceMessage();
+    }
+  };
+
+  // Handle voice transcript data
+  const handleVoiceData = (data: {
+    product_name: string;
+    quantity: number;
+    unit: string;
+    import_price: number;
+    note: string;
+  }) => {
+    // Auto-fill form with voice data
+    setCurrentItem(prev => ({
+      ...prev,
+      product_name: data.product_name,
+      quantity: data.quantity,
+      import_price: data.import_price,
+      notes: data.note ? `${data.note} (${data.unit})` : data.unit
+    }));
+    
+    setVoiceError(null);
+    
+    // Trigger image check for the new product name
+    setTimeout(() => {
+      if (data.product_name.trim()) {
+        const checkImage = async () => {
+          try {
+            const result = await ImportService.checkProductImage(data.product_name);
+            setProductImageCheck(result);
+            
+            if (result.hasImage) {
+              productHasImageMessage();
+              setTimeout(() => quantityInputRef.current?.focus(), 1000);
+            } else {
+              productNeedsImageMessage();
+            }
+          } catch (error) {
+            console.error('Error checking product image:', error);
+          }
+        };
+        checkImage();
       }
-    }
-  }, [transcript, isListening, speak]);
+    }, 100);
+  };
 
-  const addItem = () => {
-    if (currentItem.name && currentItem.sellPrice > 0) {
-      setItems([...items, { ...currentItem }]);
+  // Handle voice error
+  const handleVoiceError = (error: string) => {
+    setVoiceError(error);
+    errorMessage();
+    setTimeout(() => setVoiceError(null), 5000);
+  };
+
+  // Handle save
+  const handleSave = async () => {
+    // Validation
+    if (!currentItem.product_name.trim()) {
+      speak('Bác phải nhập tên sản phẩm nhé.');
+      return;
+    }
+
+    if (currentItem.quantity <= 0) {
+      speak('Bác phải nhập số lượng lớn hơn 0 nhé.');
+      return;
+    }
+
+    if (currentItem.import_price <= 0) {
+      speak('Bác phải nhập giá nhập lớn hơn 0 nhé.');
+      return;
+    }
+
+    // Check if image is required but not provided
+    if (!productImageCheck.hasImage && !capturedImage) {
+      speak('Bác cần chụp ảnh cho sản phẩm này nhé.');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const totalCost = currentItem.quantity * currentItem.import_price;
+      
+      const importData: Omit<ImportHistory, 'id' | 'created_at'> = {
+        product_name: currentItem.product_name,
+        barcode: currentItem.barcode,
+        quantity: currentItem.quantity,
+        import_price: currentItem.import_price,
+        total_cost: totalCost,
+        supplier_name: currentItem.supplier_name || undefined,
+        image_url: capturedImage || productImageCheck.imageUrl || undefined,
+        notes: currentItem.notes || undefined,
+        status: 'completed'
+      };
+
+      await ImportService.saveImport(importData);
+      
+      // Success feedback
+      successMessage(currentItem.product_name, currentItem.quantity);
+      
+      // Reset form
       setCurrentItem({
-        name: "",
-        importPrice: 0,
-        sellPrice: 0,
+        product_name: "",
         quantity: 1,
+        import_price: 0,
+        supplier_name: "",
+        notes: ""
       });
-      speak(`Đã thêm ${currentItem.name} vào danh sách nhập hàng`);
+      setCapturedImage(null);
+      setProductImageCheck({ hasImage: false });
+      
+      // Focus back to product name for next entry
+      setTimeout(() => {
+        const productInput = document.getElementById('product-name-input') as HTMLInputElement;
+        productInput?.focus();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error saving import:', error);
+      errorMessage();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const removeItem = (index: number) => {
-    const newItems = items.filter((_, i) => i !== index);
-    setItems(newItems);
-  };
-
-  const saveImport = () => {
-    if (items.length > 0) {
-      speak(`Đã lưu ${items.length} sản phẩm nhập hàng`);
-      // Here you would normally save to database
-      console.log("Import items:", items);
-      setItems([]);
-    }
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return amount.toLocaleString('vi-VN') + 'đ';
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="bg-purple-600 text-white p-4">
-        <h1 className="text-2xl font-bold text-center">Nhập Hàng Thông Minh</h1>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 p-4 pb-20">
-        {/* Input Form */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-          <h2 className="text-lg font-bold mb-4">Nhập sản phẩm mới</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Tên sản phẩm</label>
-              <input
-                type="text"
-                value={currentItem.name}
-                onChange={(e) => setCurrentItem({ ...currentItem, name: e.target.value })}
-                className="w-full p-3 border rounded-lg text-lg"
-                placeholder="Nhập tên sản phẩm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Giá nhập</label>
-                <input
-                  type="number"
-                  value={currentItem.importPrice}
-                  onChange={(e) => setCurrentItem({ ...currentItem, importPrice: parseInt(e.target.value) || 0 })}
-                  className="w-full p-3 border rounded-lg text-lg"
-                  placeholder="0"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Giá bán</label>
-                <input
-                  type="number"
-                  value={currentItem.sellPrice}
-                  onChange={(e) => setCurrentItem({ ...currentItem, sellPrice: parseInt(e.target.value) || 0 })}
-                  className="w-full p-3 border rounded-lg text-lg"
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Số lượng</label>
-              <input
-                type="number"
-                value={currentItem.quantity}
-                onChange={(e) => setCurrentItem({ ...currentItem, quantity: parseInt(e.target.value) || 1 })}
-                className="w-full p-3 border rounded-lg text-lg"
-                placeholder="1"
-                min="1"
-              />
-            </div>
-
-            {/* Voice Input Button */}
-            <button
-              onClick={handleVoiceInput}
-              className={`w-full ${
-                isListening 
-                  ? "bg-red-500 animate-pulse" 
-                  : "bg-purple-500 hover:bg-purple-600"
-              } text-white py-6 rounded-lg font-bold text-lg transition-colors flex items-center justify-center space-x-3`}
-            >
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-              <span>{isListening ? "ĐANG NGHE..." : "BẬT MIC NÓI ĐỂ NHẬP"}</span>
-            </button>
-
-            {transcript && (
-              <div className="bg-gray-100 p-3 rounded-lg">
-                <p className="text-sm text-gray-600">Đã nghe thấy:</p>
-                <p className="font-medium">{transcript}</p>
-              </div>
-            )}
-
-            <button
-              onClick={addItem}
-              className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-bold text-lg transition-colors"
-            >
-              Thêm vào danh sách
-            </button>
-          </div>
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="max-w-4xl mx-auto p-4">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">📦 NHẬP HÀNG</h1>
+          <p className="text-lg text-gray-600">Bác nói tên sản phẩm hoặc quét mã vạch để bắt đầu</p>
         </div>
 
-        {/* Import List */}
-        {items.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <h2 className="text-lg font-bold mb-4">Danh sách nhập hàng ({items.length})</h2>
+        {/* Main Form Card */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          {/* Product Name Input */}
+          <div className="mb-6">
+            <label className="block text-lg font-bold text-gray-800 mb-3">
+              TÊN SẢN PHẨM
+            </label>
+            <div className="flex gap-3 mb-3">
+              <div className="flex-1">
+                <VoiceInput
+                  onTranscript={handleProductNameChange}
+                  placeholder="Bác nói tên sản phẩm hoặc nhập tay..."
+                />
+              </div>
+              <div className="flex items-center justify-center">
+                <VoiceRecorder
+                  onTranscript={handleVoiceData}
+                  onError={handleVoiceError}
+                />
+              </div>
+            </div>
             
-            <div className="space-y-3">
-              {items.map((item, index) => (
-                <div key={index} className="border rounded-lg p-3 flex items-center justify-between">
+            {/* Voice error display */}
+            {voiceError && (
+              <div className="mb-3 p-3 bg-red-100 border border-red-300 rounded-lg">
+                <div className="flex items-center text-red-700">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  <span className="text-sm font-medium">{voiceError}</span>
+                </div>
+              </div>
+            )}
+            
+            <input
+              id="product-name-input"
+              type="text"
+              value={currentItem.product_name}
+              onChange={(e) => handleProductNameChange(e.target.value)}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+              placeholder="Hoặc nhập tay tại đây..."
+              autoFocus
+            />
+          </div>
+
+          {/* Barcode Scanner */}
+          <div className="mb-6">
+            <label className="block text-lg font-bold text-gray-800 mb-3">
+              MÃ VẠCH (Không bắt buộc)
+            </label>
+            <BarcodeScanner
+              onBarcodeDetected={(barcode) => {
+                setCurrentItem(prev => ({ ...prev, barcode }));
+                speak(`Đã quét được mã vạch: ${barcode}`);
+              }}
+              className="mb-3"
+            />
+            <input
+              type="text"
+              value={currentItem.barcode || ""}
+              onChange={(e) => setCurrentItem(prev => ({ ...prev, barcode: e.target.value }))}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+              placeholder="Hoặc nhập mã tay tại đây..."
+            />
+          </div>
+
+          {/* Smart Image Check Display */}
+          {(currentItem.product_name.trim() || currentItem.barcode?.trim()) && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              {productImageCheck.hasImage ? (
+                <div className="flex items-center space-x-4">
+                  <div className="relative">
+                    <img 
+                      src={productImageCheck.imageUrl} 
+                      alt="Product" 
+                      className="w-20 h-20 object-cover rounded-lg border-2 border-green-300"
+                    />
+                    <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-1">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                  </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{item.name}</h3>
-                    <p className="text-sm text-gray-600">
-                      SL: {item.quantity} | Nhập: {item.importPrice.toLocaleString()}đ | Bán: {item.sellPrice.toLocaleString()}đ
-                    </p>
-                    <p className="text-sm font-medium text-green-600">
-                      Lợi nhuận: {((item.sellPrice - item.importPrice) * item.quantity).toLocaleString()}đ
-                    </p>
+                    <div className="text-lg font-bold text-green-600 mb-1">
+                      ✅ SẢN PHẨM CÓ ẢNH RỒI
+                    </div>
+                    <div className="text-gray-600">
+                      Không cần chụp ảnh nữa ạ
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <div className="flex items-center justify-center mb-4">
+                    <AlertCircle className="w-8 h-8 text-orange-500 mr-2" />
+                    <div className="text-lg font-bold text-orange-600">
+                      CHƯA CÓ ẢNH SẢN PHẨM
+                    </div>
                   </div>
                   
+                  {/* Large Capture Button */}
                   <button
-                    onClick={() => removeItem(index)}
-                    className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-1/2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-6 px-8 rounded-lg text-xl shadow-lg transform transition-all hover:scale-105 animate-pulse"
                   >
-                    ×
+                    📷 CHỤP ẢNH MẪU
                   </button>
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileCapture}
+                    className="hidden"
+                  />
+                  
+                  <div className="text-gray-600 mt-3">
+                    Bác chụp giúp cháu một tấm ảnh nhé
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
+          )}
 
-            <button
-              onClick={saveImport}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-bold text-lg transition-colors mt-4"
-            >
-              Lưu nhập hàng
-            </button>
+          {/* Captured Image Preview */}
+          {capturedImage && (
+            <div className="mb-6">
+              <label className="block text-lg font-bold text-gray-800 mb-3">
+                ẢNH ĐÃ CHỤP
+              </label>
+              <div className="relative">
+                <img 
+                  src={capturedImage} 
+                  alt="Captured" 
+                  className="w-full h-48 object-cover rounded-lg border-2 border-blue-300"
+                />
+                <button
+                  onClick={() => {
+                    setCapturedImage(null);
+                    setCurrentItem(prev => ({ ...prev, image_url: undefined }));
+                  }}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quantity Input */}
+          <div className="mb-6">
+            <label className="block text-lg font-bold text-gray-800 mb-3">
+              SỐ LƯỢNG
+            </label>
+            <input
+              ref={quantityInputRef}
+              type="number"
+              value={currentItem.quantity || ""}
+              onChange={(e) => handleQuantityChange(e.target.value)}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+              placeholder="Nhập số lượng..."
+              min="1"
+            />
           </div>
-        )}
+
+          {/* Import Price Input */}
+          <div className="mb-6">
+            <label className="block text-lg font-bold text-gray-800 mb-3">
+              GIÁ NHẬP (MỖI SẢN PHẨM)
+            </label>
+            <input
+              ref={priceInputRef}
+              type="number"
+              value={currentItem.import_price || ""}
+              onChange={(e) => handlePriceChange(e.target.value)}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+              placeholder="Nhập giá nhập..."
+              min="0"
+            />
+            {currentItem.import_price > 0 && (
+              <div className="mt-2 text-lg font-semibold text-green-600">
+                Tổng chi phí: {formatCurrency(currentItem.quantity * currentItem.import_price)}
+              </div>
+            )}
+          </div>
+
+          {/* Supplier Input */}
+          <div className="mb-6">
+            <label className="block text-lg font-bold text-gray-800 mb-3">
+              NHÀ CUNG CẤP (Không bắt buộc)
+            </label>
+            <input
+              ref={supplierInputRef}
+              type="text"
+              value={currentItem.supplier_name || ""}
+              onChange={(e) => setCurrentItem(prev => ({ ...prev, supplier_name: e.target.value }))}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+              placeholder="Nhập tên nhà cung cấp..."
+            />
+          </div>
+
+          {/* Notes Input */}
+          <div className="mb-8">
+            <label className="block text-lg font-bold text-gray-800 mb-3">
+              GHI CHÚ (Không bắt buộc)
+            </label>
+            <textarea
+              ref={notesInputRef}
+              value={currentItem.notes || ""}
+              onChange={(e) => setCurrentItem(prev => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none h-24 resize-none"
+              placeholder="Nhập ghi chú..."
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Main Bottom Navigation */}
+      {/* Sticky Save Button */}
+      <div className="fixed bottom-20 left-0 right-0 bg-white border-t border-gray-200 p-4">
+        <button
+          onClick={handleSave}
+          disabled={isProcessing}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-6 px-8 rounded-lg text-xl shadow-lg transform transition-all hover:scale-105 disabled:scale-100"
+        >
+          {isProcessing ? (
+            <div className="flex items-center justify-center">
+              <div className="w-6 h-6 border-2 border-white border-t-transparent border-solid animate-spin rounded-full mr-3"></div>
+              ĐANG LƯU...
+            </div>
+          ) : (
+            "💾 LƯU VÀO KHO"
+          )}
+        </button>
+      </div>
+
+      {/* Bottom Navigation */}
       <MainBottomNavigation />
     </div>
   );

@@ -3,46 +3,7 @@
 import { useState } from "react";
 import { CartItem } from "@/lib/types";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
-
-// Order Item Type (temporary)
-interface OrderItem {
-  product_id: string;
-  product_name: string;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
-}
-
-// Order Type (temporary)
-interface Order {
-  id?: string;
-  created_at?: string;
-  total_amount: number;
-  items: OrderItem[];
-  payment_method: string;
-  customer_info?: any;
-  status: string;
-  notes?: string;
-  updated_at?: string;
-}
-
-// Temporary order service without Supabase
-const TempOrderService = {
-  saveOrder: async (orderData: any) => {
-    // Simulate saving order
-    const orderId = `DH${Date.now().toString(36).toUpperCase().slice(0, 8)}`;
-    
-    // Show success message
-    alert(`✅ Đã lưu đơn hàng #${orderId} thành công!\n💰 Tổng: ${orderData.total_amount.toLocaleString()}đ\n📱 Mã QR: ${orderId}`);
-    
-    // Return mock order data
-    return {
-      id: orderId,
-      ...orderData,
-      created_at: new Date().toISOString()
-    };
-  }
-};
+import { OrderService, OrderItem, Order } from "@/lib/orders";
 
 // QR Code Configuration
 const BANK_ID = "MB"; // Ngân hàng MB Bank (có thể đổi)
@@ -58,6 +19,7 @@ interface PaymentModalProps {
 export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete }: PaymentModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderSaved, setOrderSaved] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QR_TRANSFER' | 'DEBT'>('QR_TRANSFER');
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     phone: '',
@@ -89,8 +51,20 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
     setIsProcessing(true);
     
     try {
-      // Speak payment instructions
-      speak(`Tổng thanh toán ${totalAmount.toLocaleString()} đồng. Vui lòng quét mã QR để hoàn tất.`);
+      // Speak payment instructions based on payment method
+      let paymentMessage = `Tổng thanh toán ${totalAmount.toLocaleString()} đồng. `;
+      switch (paymentMethod) {
+        case 'CASH':
+          paymentMessage += 'Khách hàng đã thanh toán bằng tiền mặt.';
+          break;
+        case 'QR_TRANSFER':
+          paymentMessage += 'Vui lòng quét mã QR để hoàn tất.';
+          break;
+        case 'DEBT':
+          paymentMessage += 'Đã ghi nợ cho khách hàng.';
+          break;
+      }
+      speak(paymentMessage);
 
       // Convert cart items to order items format
       const orderItems: OrderItem[] = items.map(item => ({
@@ -102,29 +76,45 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
       }));
 
       // Prepare order data
-      const orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'> = {
+      const orderData: Omit<Order, 'id' | 'created_at'> = {
         total_amount: totalAmount,
         items: orderItems,
-        payment_method: 'QR_TRANSFER',
-        customer_info: {
-          name: customerInfo.name || 'Khách hàng',
-          phone: customerInfo.phone || '',
-          address: customerInfo.address || '',
-          notes: customerInfo.notes || ''
-        },
-        status: 'completed',
-        notes: `QR Transfer - Mã đơn: ${orderId}`
+        payment_method: paymentMethod,
+        customer_name: customerInfo.name || 'Khách hàng',
+        customer_phone: customerInfo.phone || '',
+        customer_address: customerInfo.address || '',
+        status: paymentMethod === 'DEBT' ? 'pending' : 'completed',
+        notes: `${paymentMethod} - Mã đơn: ${orderId}${paymentMethod === 'DEBT' ? ' (Chờ thu tiền)' : ''}`
       };
 
-      // Save order temporarily
-      const savedOrder = await TempOrderService.saveOrder(orderData);
+      // Save order using OrderService
+      const savedOrder = await OrderService.saveOrder(orderData);
 
-      // Show success message
-      alert(`✅ Đã lưu đơn hàng #${savedOrder.id?.slice(0, 8)} thành công!\n💰 Tổng: ${totalAmount.toLocaleString()}đ\n📱 Mã QR: ${orderId}`);
+      // Show success message based on payment method
+      let successMessage = `✅ Đã lưu đơn hàng #${savedOrder.id?.slice(0, 8)} thành công!\n💰 Tổng: ${totalAmount.toLocaleString()}đ`;
+      
+      switch (paymentMethod) {
+        case 'CASH':
+          successMessage += '\n💵 Thanh toán bằng tiền mặt';
+          break;
+        case 'QR_TRANSFER':
+          successMessage += `\n📱 Mã QR: ${orderId}`;
+          break;
+        case 'DEBT':
+          successMessage += '\n📝 Đã ghi nợ (chờ thu tiền)';
+          break;
+      }
+      
+      alert(successMessage);
       
       setOrderSaved(true);
       setIsProcessing(false);
-      speak("Đã nhận tiền. Cảm ơn quý khách!");
+      
+      // Speak appropriate success message
+      let successVoice = paymentMethod === 'DEBT' 
+        ? "Đã ghi nợ đơn hàng. Cảm ơn quý khách!"
+        : "Đã nhận tiền. Cảm ơn quý khách!";
+      speak(successVoice);
 
     } catch (error) {
       console.error('Payment error:', error);
@@ -160,6 +150,34 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+        </div>
+
+        {/* Payment Method Selection */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3">Phương thức thanh toán:</h3>
+          <div className="space-y-2">
+            {[
+              { value: 'CASH', label: '💵 Tiền mặt (Cash)', description: 'Khách hàng trả bằng tiền mặt' },
+              { value: 'QR_TRANSFER', label: '📱 Chuyển khoản (QR)', description: 'Quét mã QR để thanh toán' },
+              { value: 'DEBT', label: '📝 Ghi nợ (Debt)', description: 'Khách hàng sẽ trả sau' }
+            ].map((method) => (
+              <label key={method.value} className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value={method.value}
+                  checked={paymentMethod === method.value}
+                  onChange={(e) => setPaymentMethod(e.target.value as 'CASH' | 'QR_TRANSFER' | 'DEBT')}
+                  disabled={isProcessing}
+                  className="w-4 h-4 text-green-600 focus:ring-green-500"
+                />
+                <div className="ml-3 flex-1">
+                  <div className="font-medium">{method.label}</div>
+                  <div className="text-sm text-gray-600">{method.description}</div>
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Customer Information */}
@@ -224,9 +242,10 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
           </div>
         </div>
 
-        {/* QR Code Display */}
-        <div className="text-center mb-6">
-          <div className="bg-gray-100 p-4 rounded-lg inline-block">
+        {/* QR Code Display - Only show for QR Transfer */}
+        {paymentMethod === 'QR_TRANSFER' && (
+          <div className="text-center mb-6">
+            <div className="bg-gray-100 p-4 rounded-lg inline-block">
             {/* QR Code Image */}
             <div className="mb-3">
               <img 
@@ -254,10 +273,11 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
             </div>
           </div>
           
-          <p className="text-sm text-gray-600 mt-2">
-            Quét mã QR bằng ứng dụng ngân hàng
-          </p>
-        </div>
+            <p className="text-sm text-gray-600 mt-2">
+              Quét mã QR bằng ứng dụng ngân hàng
+            </p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-3">
@@ -288,10 +308,28 @@ export default function PaymentModal({ isOpen, onClose, items, onPaymentComplete
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4V9a2 2 0 012-2h4a2 2 0 012-2v2" />
-                </svg>
-                <span>Quét mã QR</span>
+                {paymentMethod === 'QR_TRANSFER' ? (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4V9a2 2 0 012-2h4a2 2 0 012-2v2" />
+                    </svg>
+                    <span>Quét mã QR</span>
+                  </>
+                ) : paymentMethod === 'CASH' ? (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Xác nhận tiền mặt</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Ghi nợ</span>
+                  </>
+                )}
               </>
             )}
           </button>
