@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { BrowserMultiFormatReader, Result } from "@zxing/browser";
 import { Camera, Upload, CheckCircle, AlertCircle } from "lucide-react";
 
@@ -125,27 +125,34 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
   }, [onBarcodeDetected, onError, playBeep]);
 
   // Camera scanning
-  const startCameraScan = async () => {
+  const startCameraScan = useCallback(async () => {
     try {
       setIsUsingCamera(true);
       setIsScanning(true);
       
       const reader = initializeReader();
       
-      if (!videoRef.current) {
-        throw new Error('Video element not found');
-      }
-
-      // Start continuous scanning from camera
-      reader.decodeFromVideoDevice(undefined, videoRef.current, (result: Result | null) => {
-        if (result) {
-          const barcode = result.getText();
-          console.log('Camera barcode detected:', barcode);
-          onBarcodeDetected(barcode);
-          stopCameraScan();
-          playBeep();
-        }
+      // Get user media
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
       });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        
+        // Start continuous scanning from camera
+        reader.decodeFromVideoDevice(undefined, videoRef.current, (result: Result | null) => {
+          if (result) {
+            const barcode = result.getText();
+            console.log('Camera barcode detected:', barcode);
+            onBarcodeDetected(barcode);
+            stopCameraScan();
+            playBeep();
+          }
+        });
+      }
 
     } catch (error) {
       console.error('Camera scanning error:', error);
@@ -156,15 +163,20 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
         onError('Không thể truy cập camera. Bác dùng tính năng chụp ảnh nhé.');
       }
     }
-  };
+  }, [initializeReader, onBarcodeDetected, onError, playBeep]);
 
-  const stopCameraScan = () => {
+  const stopCameraScan = useCallback(() => {
     if (codeReaderRef.current) {
       codeReaderRef.current.reset();
     }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
     setIsUsingCamera(false);
     setIsScanning(false);
-  };
+  }, []);
 
   // Generate realistic Vietnamese barcode
   const generateVietnameseBarcode = (seed: string): string => {
@@ -199,6 +211,13 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
     }
     return ((10 - (sum % 10)) % 10).toString();
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCameraScan();
+    };
+  }, [stopCameraScan]);
 
   return (
     <div className={`relative ${className}`}>
