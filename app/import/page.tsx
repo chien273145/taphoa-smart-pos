@@ -38,6 +38,7 @@ export default function ImportPage() {
     product?: any;
   }>({ hasImage: false });
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
   
   // Refs for auto-focus
   const quantityInputRef = useRef<HTMLInputElement>(null);
@@ -325,15 +326,26 @@ export default function ImportPage() {
               onBarcodeDetected={(barcode) => {
                 if (barcode) {
                   setCurrentItem(prev => ({ ...prev, barcode }));
+                  setBarcodeError(null);
                   speak(`Đã quét được mã vạch: ${barcode}`);
                 }
               }}
               onError={(error) => {
-                setVoiceError(error);
-                setTimeout(() => setVoiceError(null), 5000);
+                setBarcodeError(error);
+                setTimeout(() => setBarcodeError(null), 5000);
               }}
               className="mb-3"
             />
+            
+            {/* Barcode error display */}
+            {barcodeError && (
+              <div className="mb-3 p-3 bg-orange-100 border border-orange-300 rounded-lg">
+                <div className="flex items-center text-orange-700">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  <span className="text-sm font-medium">{barcodeError}</span>
+                </div>
+              </div>
+            )}
             <input
               type="text"
               value={currentItem.barcode || ""}
