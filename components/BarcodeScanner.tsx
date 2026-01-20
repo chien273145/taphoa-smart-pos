@@ -5,30 +5,54 @@ import { Camera, Upload, CheckCircle } from "lucide-react";
 
 interface BarcodeScannerProps {
   onBarcodeDetected: (barcode: string) => void;
+  onError?: (error: string) => void;
   className?: string;
 }
 
-export default function BarcodeScanner({ onBarcodeDetected, className = "" }: BarcodeScannerProps) {
+export default function BarcodeScanner({ onBarcodeDetected, onError, className = "" }: BarcodeScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type.startsWith('image/')) {
       setIsScanning(true);
       setCapturedImage(URL.createObjectURL(file));
       
-      // Simulate barcode scanning
-      setTimeout(() => {
-        // Generate mock barcode for demo
-        const mockBarcode = "8901234567890";
-        onBarcodeDetected(mockBarcode);
+      try {
+        // Send image to barcode scanning API
+        const formData = new FormData();
+        formData.append('image', file);
+
+        const response = await fetch('/api/barcode-scan', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.barcode) {
+          onBarcodeDetected(result.barcode);
+          console.log('Barcode detected:', result.barcode);
+        } else {
+          // If no barcode detected, still show the image but notify user
+          console.log('No barcode detected in image');
+          onBarcodeDetected(''); // Empty string to indicate no barcode
+          if (onError && result.error) {
+            onError(result.error);
+          }
+        }
+      } catch (error) {
+        console.error('Barcode scanning error:', error);
+        onBarcodeDetected(''); // Empty string on error
+        if (onError) {
+          onError('Lỗi quét mã vạch. Bác thử lại giúp cháu nhé.');
+        }
+      } finally {
         setIsScanning(false);
-        
-        // Play beep sound
         playBeep();
-      }, 1500);
+      }
     }
   };
 

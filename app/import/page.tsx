@@ -323,8 +323,14 @@ export default function ImportPage() {
             </label>
             <BarcodeScanner
               onBarcodeDetected={(barcode) => {
-                setCurrentItem(prev => ({ ...prev, barcode }));
-                speak(`Đã quét được mã vạch: ${barcode}`);
+                if (barcode) {
+                  setCurrentItem(prev => ({ ...prev, barcode }));
+                  speak(`Đã quét được mã vạch: ${barcode}`);
+                }
+              }}
+              onError={(error) => {
+                setVoiceError(error);
+                setTimeout(() => setVoiceError(null), 5000);
               }}
               className="mb-3"
             />
