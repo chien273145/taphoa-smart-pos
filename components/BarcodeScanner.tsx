@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { BrowserMultiFormatReader, Result } from "@zxing/browser";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { DecodeHintType, BarcodeFormat, Result } from "@zxing/library";
 import { Camera, Upload, CheckCircle, AlertCircle } from "lucide-react";
 
 interface BarcodeScannerProps {
@@ -17,11 +18,29 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
 
-  // Initialize ZXing reader
+  // Debounce refs to prevent duplicate scans
+  const lastScanRef = useRef<string>('');
+  const lastScanTimeRef = useRef<number>(0);
+
+  // Initialize ZXing reader with format hints for better EAN-13 scanning
   const initializeReader = useCallback(() => {
     if (!codeReaderRef.current) {
-      codeReaderRef.current = new BrowserMultiFormatReader();
+      const hints = new Map();
+      // Prioritize common barcode formats for retail products
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39
+      ]);
+      // Try harder to decode barcodes
+      hints.set(DecodeHintType.TRY_HARDER, true);
+
+      codeReaderRef.current = new BrowserMultiFormatReader(hints);
     }
     return codeReaderRef.current;
   }, []);
@@ -32,14 +51,14 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      
+
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      
+
       oscillator.frequency.value = 1000;
       oscillator.type = 'sine';
       gainNode.gain.value = 0.3;
-      
+
       oscillator.start();
       oscillator.stop(audioContext.currentTime + 0.1);
     } catch (err) {
@@ -63,12 +82,12 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
     try {
       const reader = new BrowserMultiFormatReader();
       const imageElement = new Image();
-      
+
       imageElement.onload = async () => {
         try {
           // Try to decode barcode from image
           const result = await reader.decodeFromImageElement(imageElement);
-          
+
           if (result && result.getText()) {
             const barcode = result.getText();
             console.log('Barcode detected:', barcode);
@@ -78,7 +97,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
             const fallbackBarcode = generateVietnameseBarcode(file.name);
             console.log('Using fallback barcode:', fallbackBarcode);
             onBarcodeDetected(fallbackBarcode);
-            
+
             if (onError) {
               onError('Không tìm thấy mã vạch trong ảnh. Đã tạo mã tạm thời.');
             }
@@ -87,7 +106,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
           console.log('No barcode found, using fallback');
           const fallbackBarcode = generateVietnameseBarcode(file.name);
           onBarcodeDetected(fallbackBarcode);
-          
+
           if (onError) {
             onError('Không tìm thấy mã vạch. Đã tạo mã tạm thời.');
           }
@@ -103,7 +122,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
         onBarcodeDetected(fallbackBarcode);
         setIsScanning(false);
         playBeep();
-        
+
         if (onError) {
           onError('Không thể tải ảnh. Đã tạo mã tạm thời.');
         }
@@ -117,7 +136,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
       onBarcodeDetected(fallbackBarcode);
       setIsScanning(false);
       playBeep();
-      
+
       if (onError) {
         onError('Lỗi quét mã. Đã tạo mã tạm thời.');
       }
@@ -129,36 +148,51 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
     try {
       setIsUsingCamera(true);
       setIsScanning(true);
-      
+
       const reader = initializeReader();
-      
-      // Get user media
+
+      // Get user media with high resolution for better barcode scanning
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 }
+        },
         audio: false
       });
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        
-        // Start continuous scanning from camera
-        reader.decodeFromVideoDevice(undefined, videoRef.current, (result: Result | null) => {
+
+        // Start continuous scanning from camera with debounce
+        const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result: Result | undefined) => {
           if (result) {
             const barcode = result.getText();
-            console.log('Camera barcode detected:', barcode);
-            onBarcodeDetected(barcode);
-            stopCameraScan();
-            playBeep();
+            const now = Date.now();
+
+            // Debounce: prevent scanning same barcode within 2 seconds
+            if (barcode !== lastScanRef.current || now - lastScanTimeRef.current > 2000) {
+              lastScanRef.current = barcode;
+              lastScanTimeRef.current = now;
+
+              console.log('Camera barcode detected:', barcode);
+              onBarcodeDetected(barcode);
+              stopCameraScan();
+              playBeep();
+            }
           }
         });
+
+        // Store controls to stop later
+        controlsRef.current = controls;
       }
 
     } catch (error) {
       console.error('Camera scanning error:', error);
       setIsUsingCamera(false);
       setIsScanning(false);
-      
+
       if (onError) {
         onError('Không thể truy cập camera. Bác dùng tính năng chụp ảnh nhé.');
       }
@@ -166,8 +200,10 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
   }, [initializeReader, onBarcodeDetected, onError, playBeep]);
 
   const stopCameraScan = useCallback(() => {
-    if (codeReaderRef.current) {
-      codeReaderRef.current.reset();
+    // Stop the scanner controls
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
     }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
@@ -191,14 +227,14 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
     // Vietnamese EAN-13 patterns
     const vietnamesePrefixes = ['893', '890', '894', '888'];
     const prefix = vietnamesePrefixes[Math.abs(hash) % vietnamesePrefixes.length];
-    
+
     // Generate 10-digit suffix
     const suffix = Math.abs(hash).toString().padStart(10, '0').slice(0, 10);
-    
+
     // Calculate check digit
     const barcode12 = prefix + suffix;
     const checkDigit = calculateEAN13CheckDigit(barcode12);
-    
+
     return barcode12 + checkDigit;
   };
 
@@ -230,15 +266,16 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
         onChange={handleFileSelect}
         className="hidden"
       />
-      
+
       {/* Camera view */}
       {isUsingCamera && (
         <div className="relative mb-3">
           <video
             ref={videoRef}
-            className="w-full h-48 object-cover rounded-lg border-2 border-blue-300"
+            className="w-full h-64 object-cover rounded-lg border-2 border-blue-300"
             autoPlay
             playsInline
+            muted
           />
           <div className="absolute top-2 right-2">
             <button
@@ -253,7 +290,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
           </div>
         </div>
       )}
-      
+
       {/* Scanning buttons */}
       <div className="grid grid-cols-2 gap-3">
         <button
@@ -273,7 +310,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
             </>
           )}
         </button>
-        
+
         <button
           onClick={startCameraScan}
           disabled={isScanning}
@@ -292,13 +329,13 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
           )}
         </button>
       </div>
-      
+
       {/* Captured image preview */}
       {capturedImage && !isUsingCamera && (
         <div className="mt-3 relative">
-          <img 
-            src={capturedImage} 
-            alt="Scanned barcode" 
+          <img
+            src={capturedImage}
+            alt="Scanned barcode"
             className="w-full h-32 object-cover rounded-lg border-2 border-green-300"
           />
           <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
@@ -306,7 +343,7 @@ export default function BarcodeScanner({ onBarcodeDetected, onError, className =
           </div>
         </div>
       )}
-      
+
       {/* Instructions */}
       <div className="mt-3 text-center text-sm text-gray-600">
         <p>📷 Chụp ảnh có mã vạch</p>
