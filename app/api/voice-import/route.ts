@@ -6,7 +6,6 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
 
 export async function POST(request: NextRequest) {
   try {
-    // Get form data with audio file
     const formData = await request.formData();
     const audioFile = formData.get('audio') as File;
 
@@ -17,12 +16,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert audio file to base64
     const arrayBuffer = await audioFile.arrayBuffer();
     const base64Audio = Buffer.from(arrayBuffer).toString('base64');
 
-    // Get the model
-    const model = genAI.getGenerativeModel({ 
+    const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       generationConfig: {
         temperature: 0.1,
@@ -32,20 +29,65 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Prepare the prompt with audio
-    const prompt = `Bạn là trợ lý nhập kho tạp hóa. Hãy nghe đoạn ghi âm tiếng Việt này (người nói có thể dùng tiếng lóng, giọng địa phương). Nhiệm vụ: Trích xuất thông tin nhập hàng thành JSON. Các trường cần lấy:
+    const prompt = `Bạn là trợ lý nhập hàng tạp hóa thông minh. Hãy phân tích giọng nói tiếng Việt và trích xuất thông tin nhập hàng.
 
-product_name: Tên sản phẩm (String).
-quantity: Số lượng (Number).
-unit: Đơn vị tính (String - ví dụ: thùng, két, gói, chai).
-import_price: Giá nhập (Number). Nếu người nói '120 ca' hoặc '120', hãy hiểu là 120000.
-note: Ghi chú thêm (String - ví dụ: hàng khuyến mãi, cận date).
+=== QUY TẮC NHẬN DIỆN TIẾNG LÓNG ===
 
-Output format: Chỉ trả về JSON thuần túy, không Markdown.
+Tên sản phẩm lóng:
+- "húc", "bò húc" -> Redbull
+- "hảo hảo", "mì tôm" -> Mì Hảo Hảo
+- "xá xị" -> Nước ngọt Xá Xị
+- "sting" -> Nước tăng lực Sting
+- "bi", "bia" -> Bia (cần hỏi thêm loại nào)
+- "nước suối" -> Nước khoáng
+- "mì gói" -> Mì ăn liền
+
+Đơn vị tiền lóng:
+- "ca", "k", "ká" -> nghìn đồng (x1000)
+- Ví dụ: "120k" hoặc "120 ca" = 120000
+- Ví dụ: "hai trăm mốt" = 210000
+
+Đơn vị tính:
+- "lốc" -> bó/lốc (thường 4-6 đơn vị)
+- "két" -> két/thùng nhỏ (thường 24 đơn vị)
+- "thùng" -> thùng lớn
+- "lố" -> lố (thường 10-12 đơn vị)
+
+Từ khóa đặc biệt:
+- "trả lại", "trả hàng", "hoàn" -> Số lượng âm (trả hàng)
+- "khuyến mãi", "KM" -> Ghi chú khuyến mãi
+- "cận date", "sắp hết hạn" -> Ghi chú cận date
+
+=== VÍ DỤ MẪU (Few-Shot) ===
+
+User: "nhập năm thùng húc giá hai trăm mốt"
+Output: {"product_name": "Redbull", "quantity": 5, "unit": "thùng", "import_price": 210000, "note": ""}
+
+User: "trả lại hai chai nước mắm"
+Output: {"product_name": "Nước mắm", "quantity": -2, "unit": "chai", "import_price": 0, "note": "Trả hàng"}
+
+User: "nhập ba lốc hảo hảo 45k"
+Output: {"product_name": "Mì Hảo Hảo", "quantity": 3, "unit": "lốc", "import_price": 45000, "note": ""}
+
+User: "hai két bia 330 giá một triệu rưỡi hàng khuyến mãi"
+Output: {"product_name": "Bia 330", "quantity": 2, "unit": "két", "import_price": 1500000, "note": "Hàng khuyến mãi"}
+
+User: "mười thùng sting đỏ giá 180 ca"
+Output: {"product_name": "Nước tăng lực Sting đỏ", "quantity": 10, "unit": "thùng", "import_price": 180000, "note": ""}
+
+=== YÊU CẦU OUTPUT ===
+
+Trả về JSON thuần túy (không Markdown, không giải thích):
+{
+  "product_name": "Tên sản phẩm đầy đủ",
+  "quantity": <số nguyên, âm nếu trả hàng>,
+  "unit": "đơn vị tính",
+  "import_price": <số nguyên VND>,
+  "note": "ghi chú nếu có"
+}
 
 Phân tích âm thanh và trả về JSON:`;
 
-    // Create the content with audio
     const imagePart = {
       inlineData: {
         data: base64Audio,
@@ -59,16 +101,11 @@ Phân tích âm thanh và trả về JSON:`;
 
     console.log('Gemini response:', text);
 
-    // Try to parse JSON response
     try {
-      // Clean up response - remove any markdown formatting
       let cleanText = text.trim();
-      
-      // Remove code blocks if present
       cleanText = cleanText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
       cleanText = cleanText.replace(/```/g, '');
-      
-      // Try to extract JSON from the text
+
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         cleanText = jsonMatch[0];
@@ -76,7 +113,6 @@ Phân tích âm thanh và trả về JSON:`;
 
       const parsedData = JSON.parse(cleanText);
 
-      // Validate and clean the data
       const cleanedData = {
         product_name: parsedData.product_name || '',
         quantity: parseInt(parsedData.quantity) || 1,
@@ -93,7 +129,7 @@ Phân tích âm thanh và trả về JSON:`;
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError);
       console.error('Raw response:', text);
-      
+
       return NextResponse.json({
         success: false,
         error: 'Không phân tích được giọng nói. Bác nói lại giúp cháu nhé.',
@@ -103,29 +139,27 @@ Phân tích âm thanh và trả về JSON:`;
 
   } catch (error) {
     console.error('Voice import API Error:', error);
-    
-    // Check for API key error
+
     if (error instanceof Error && error.message.includes('API_KEY')) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Chưa cấu hình Google AI API Key. Vui lòng liên hệ quản trị viên.' 
+        {
+          success: false,
+          error: 'Chưa cấu hình Google AI API Key. Vui lòng liên hệ quản trị viên.'
         },
         { status: 500 }
       );
     }
 
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Lỗi xử lý giọng nói. Bác thử lại giúp cháu nhé.' 
+      {
+        success: false,
+        error: 'Lỗi xử lý giọng nói. Bác thử lại giúp cháu nhé.'
       },
       { status: 500 }
     );
   }
 }
 
-// Handle OPTIONS request for CORS
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
