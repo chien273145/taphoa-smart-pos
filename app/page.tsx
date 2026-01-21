@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { mockProducts } from "@/lib/mockData";
-import { CartItem } from "@/lib/types";
+import { ProductStorage } from "@/lib/productStorage";
+import { Product, CartItem } from "@/lib/types";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 import { CartPersistence } from "@/lib/cartPersistence";
 import ProductGrid from "@/components/ProductGrid";
@@ -17,6 +18,7 @@ import VoiceSearch from "@/components/VoiceSearch";
 
 export default function Home() {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [products, setProducts] = useState<Product[]>(mockProducts);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPriceCheckMode, setIsPriceCheckMode] = useState(false);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
@@ -26,11 +28,31 @@ export default function Home() {
   // Handle hydration and load cart from localStorage
   useEffect(() => {
     setIsMounted(true);
+
+    // Load cart
     const savedCart = CartPersistence.loadCart();
     if (savedCart.length > 0) {
       setCart(savedCart);
       console.log('Cart loaded from localStorage:', CartPersistence.getCartSummary(savedCart));
     }
+
+    // Load products (imported + mock)
+    const allProducts = ProductStorage.getAllProducts();
+    setProducts(allProducts);
+    console.log('📦 Products loaded:', allProducts.length, 'items');
+
+    // Listen for product updates from import page
+    const handleProductsUpdated = () => {
+      const updatedProducts = ProductStorage.getAllProducts();
+      setProducts(updatedProducts);
+      console.log('📦 Products updated:', updatedProducts.length, 'items');
+    };
+
+    window.addEventListener('productsUpdated', handleProductsUpdated);
+
+    return () => {
+      window.removeEventListener('productsUpdated', handleProductsUpdated);
+    };
   }, []);
 
   // Save cart to localStorage whenever it changes
@@ -42,7 +64,7 @@ export default function Home() {
   }, [cart, isMounted]);
 
   const addToCart = (productId: string) => {
-    const product = mockProducts.find(p => p.id === productId);
+    const product = products.find(p => p.id === productId);
     if (product) {
       if (isPriceCheckMode) {
         // Price check mode - only speak price, don't add to cart
@@ -51,7 +73,7 @@ export default function Home() {
         // Normal mode - add to cart
         setCart(prevCart => {
           const existingItem = prevCart.find(item => item.product.id === productId);
-          
+
           if (existingItem) {
             return prevCart.map(item =>
               item.product.id === productId
@@ -59,7 +81,7 @@ export default function Home() {
                 : item
             );
           }
-          
+
           speak(`Đã thêm ${product.name}, ${product.price.toLocaleString()} đồng`);
           return [...prevCart, { product, quantity: 1 }];
         });
@@ -70,7 +92,7 @@ export default function Home() {
   const removeFromCart = (productId: string) => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.product.id === productId);
-      
+
       if (existingItem && existingItem.quantity > 1) {
         return prevCart.map(item =>
           item.product.id === productId
@@ -78,7 +100,7 @@ export default function Home() {
             : item
         );
       }
-      
+
       return prevCart.filter(item => item.product.id !== productId);
     });
   };
@@ -111,20 +133,18 @@ export default function Home() {
       <div className="bg-blue-600 text-white p-4">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold">Tạp Hóa Smart POS</h1>
-          
+
           {/* Mode Switch */}
           <div className="flex items-center space-x-2">
             <span className="text-xs font-medium">Bán</span>
             <button
               onClick={() => setIsPriceCheckMode(!isPriceCheckMode)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                isPriceCheckMode ? "bg-green-500" : "bg-gray-300"
-              }`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${isPriceCheckMode ? "bg-green-500" : "bg-gray-300"
+                }`}
             >
               <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                  isPriceCheckMode ? "translate-x-5" : "translate-x-1"
-                }`}
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${isPriceCheckMode ? "translate-x-5" : "translate-x-1"
+                  }`}
               />
             </button>
             <span className="text-xs font-medium">Xem giá</span>
@@ -136,13 +156,13 @@ export default function Home() {
       <div className="flex-1 flex flex-col lg:flex-row">
         {/* Product Grid - Full width on mobile, sidebar on desktop */}
         <div className="flex-1 p-4 pb-24 lg:pb-4">
-          <ProductGrid products={mockProducts} onAddToCart={addToCart} />
+          <ProductGrid products={products} onAddToCart={addToCart} />
         </div>
 
         {/* Cart Sidebar - Desktop only */}
         <div className="hidden lg:block lg:w-96 bg-white border-l">
-          <Cart 
-            items={cart} 
+          <Cart
+            items={cart}
             onRemoveFromCart={removeFromCart}
             onAddToCart={addToCart}
             onClearCart={clearCart}
@@ -152,8 +172,8 @@ export default function Home() {
 
       {/* Action Buttons */}
       <div className="hidden lg:block">
-        <ActionButtons 
-          onAddToCart={addToCart} 
+        <ActionButtons
+          onAddToCart={addToCart}
           onPayment={handlePayment}
           isPriceCheckMode={isPriceCheckMode}
         />
@@ -163,7 +183,7 @@ export default function Home() {
       <div className="lg:hidden fixed bottom-32 left-0 right-0 bg-white border-t p-4">
         <div className="grid grid-cols-3 gap-2">
           {/* Quét mã vạch */}
-          <button 
+          <button
             onClick={() => {
               const input = document.getElementById('mobile-barcode-input') as HTMLInputElement;
               if (input) input.click();
@@ -177,7 +197,7 @@ export default function Home() {
           </button>
 
           {/* Chụp ảnh AI */}
-          <button 
+          <button
             onClick={() => {
               const input = document.getElementById('mobile-camera-input') as HTMLInputElement;
               if (input) input.click();
@@ -192,7 +212,7 @@ export default function Home() {
           </button>
 
           {/* Nói tên */}
-          <button 
+          <button
             onClick={() => {
               // Trigger voice recognition
               const voiceButton = document.querySelector('[data-voice-trigger]') as HTMLButtonElement;
@@ -210,10 +230,10 @@ export default function Home() {
 
       {/* Sticky Cart Footer - Mobile only */}
       <div className="lg:hidden">
-        <StickyCartFooter 
-          items={cart} 
-          onOpenCart={() => setIsCartDrawerOpen(true)} 
-          onPayment={handleFloatingPayment} 
+        <StickyCartFooter
+          items={cart}
+          onOpenCart={() => setIsCartDrawerOpen(true)}
+          onPayment={handleFloatingPayment}
         />
       </div>
 
@@ -238,18 +258,18 @@ export default function Home() {
 
       {/* Main Bottom Navigation */}
       <MainBottomNavigation />
-      
+
       {/* Mobile Debug Info */}
       <MobileDebugInfo />
-      
+
       {/* Hidden VoiceSearch for mobile triggers */}
       <div style={{ opacity: 0, position: 'absolute', zIndex: -1, width: '1px', height: '1px', overflow: 'hidden' }}>
-        <VoiceSearch 
-          onProductFound={addToCart} 
+        <VoiceSearch
+          onProductFound={addToCart}
           isPriceCheckMode={isPriceCheckMode}
         />
       </div>
-      
+
       {/* Hidden mobile inputs for iOS compatibility */}
       <div style={{ opacity: 0, position: 'absolute', zIndex: -1, width: '1px', height: '1px', overflow: 'hidden' }}>
         <input
@@ -265,7 +285,7 @@ export default function Home() {
                 console.log("🔍 Mobile barcode scanned:", mockBarcode);
                 const mockProductId = "prod-001";
                 addToCart(mockProductId);
-                
+
                 const successMsg = document.createElement('div');
                 successMsg.textContent = '✅ Đã quét mã: ' + mockBarcode;
                 Object.assign(successMsg.style, {
@@ -291,7 +311,7 @@ export default function Home() {
             }
           }}
         />
-        
+
         <input
           id="mobile-camera-input"
           type="file"

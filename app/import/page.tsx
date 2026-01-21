@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ImportService, ImportHistory } from "@/lib/import";
 import { useImportVoiceAssistant } from "@/hooks/useImportVoiceAssistant";
+import { ProductStorage, ImportedProduct } from "@/lib/productStorage";
 import MainBottomNavigation from "@/components/MainBottomNavigation";
 import VoiceInput from "@/components/VoiceInput";
 import VoiceRecorder from "@/components/VoiceRecorder";
@@ -28,7 +29,7 @@ export default function ImportPage() {
     supplier_name: "",
     notes: ""
   });
-  
+
   // UI states
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -39,15 +40,15 @@ export default function ImportPage() {
   }>({ hasImage: false });
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
-  
+
   // Refs for auto-focus
   const quantityInputRef = useRef<HTMLInputElement>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
   const supplierInputRef = useRef<HTMLInputElement>(null);
   const notesInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-// Voice assistant
+
+  // Voice assistant
   const {
     speak,
     welcomeMessage,
@@ -73,9 +74,9 @@ export default function ImportPage() {
             currentItem.product_name,
             currentItem.barcode
           );
-          
+
           setProductImageCheck(result);
-          
+
           // Voice guidance based on image check
           if (result.hasImage) {
             productHasImageMessage();
@@ -104,7 +105,7 @@ export default function ImportPage() {
         const result = e.target?.result as string;
         setCapturedImage(result);
         setCurrentItem(prev => ({ ...prev, image_url: result }));
-        
+
         // Auto-focus to quantity after image capture
         setTimeout(() => quantityInputRef.current?.focus(), 500);
         speak('Đã chụp ảnh xong, bác nhập số lượng nhé.');
@@ -121,7 +122,7 @@ export default function ImportPage() {
   const handleQuantityChange = (value: string) => {
     const quantity = parseInt(value) || 0;
     setCurrentItem(prev => ({ ...prev, quantity }));
-    
+
     // Auto-focus to price when quantity is entered
     if (quantity > 0) {
       setTimeout(() => priceInputRef.current?.focus(), 200);
@@ -132,7 +133,7 @@ export default function ImportPage() {
   const handlePriceChange = (value: string) => {
     const price = parseInt(value) || 0;
     setCurrentItem(prev => ({ ...prev, import_price: price }));
-    
+
     // Auto-focus to supplier when price is entered
     if (price > 0) {
       setTimeout(() => supplierInputRef.current?.focus(), 200);
@@ -156,9 +157,9 @@ export default function ImportPage() {
       import_price: data.import_price,
       notes: data.note ? `${data.note} (${data.unit})` : data.unit
     }));
-    
+
     setVoiceError(null);
-    
+
     // Trigger image check for the new product name
     setTimeout(() => {
       if (data.product_name.trim()) {
@@ -166,7 +167,7 @@ export default function ImportPage() {
           try {
             const result = await ImportService.checkProductImage(data.product_name);
             setProductImageCheck(result);
-            
+
             if (result.hasImage) {
               productHasImageMessage();
               setTimeout(() => quantityInputRef.current?.focus(), 1000);
@@ -217,7 +218,7 @@ export default function ImportPage() {
 
     try {
       const totalCost = currentItem.quantity * currentItem.import_price;
-      
+
       const importData: Omit<ImportHistory, 'id' | 'created_at'> = {
         product_name: currentItem.product_name,
         barcode: currentItem.barcode,
@@ -231,10 +232,28 @@ export default function ImportPage() {
       };
 
       await ImportService.saveImport(importData);
-      
+
+      // === THÊM SẢN PHẨM VÀO KHO BÁN HÀNG ===
+      const sellPrice = Math.round(currentItem.import_price * 1.3); // Giá bán = giá nhập + 30%
+
+      const newProduct: ImportedProduct = {
+        id: `imported-${Date.now()}`,
+        name: currentItem.product_name,
+        price: sellPrice,
+        barcode: currentItem.barcode || null,
+        image_url: capturedImage || productImageCheck.imageUrl || null,
+        category: 'Hàng mới nhập',
+        importDate: new Date().toISOString(),
+        importPrice: currentItem.import_price,
+        quantity: currentItem.quantity
+      };
+
+      ProductStorage.addProduct(newProduct);
+      console.log('✅ Đã thêm sản phẩm vào kho bán hàng:', newProduct.name, 'Giá bán:', sellPrice);
+
       // Success feedback
       successMessage(currentItem.product_name, currentItem.quantity);
-      
+
       // Reset form
       setCurrentItem({
         product_name: "",
@@ -245,7 +264,7 @@ export default function ImportPage() {
       });
       setCapturedImage(null);
       setProductImageCheck({ hasImage: false });
-      
+
       // Focus back to product name for next entry
       setTimeout(() => {
         const productInput = document.getElementById('product-name-input') as HTMLInputElement;
@@ -295,7 +314,7 @@ export default function ImportPage() {
                 />
               </div>
             </div>
-            
+
             {/* Voice error display */}
             {voiceError && (
               <div className="mb-3 p-3 bg-red-100 border border-red-300 rounded-lg">
@@ -305,7 +324,7 @@ export default function ImportPage() {
                 </div>
               </div>
             )}
-            
+
             <input
               id="product-name-input"
               type="text"
@@ -336,7 +355,7 @@ export default function ImportPage() {
               }}
               className="mb-3"
             />
-            
+
             {/* Barcode error display */}
             {barcodeError && (
               <div className="mb-3 p-3 bg-orange-100 border border-orange-300 rounded-lg">
@@ -361,9 +380,9 @@ export default function ImportPage() {
               {productImageCheck.hasImage ? (
                 <div className="flex items-center space-x-4">
                   <div className="relative">
-                    <img 
-                      src={productImageCheck.imageUrl} 
-                      alt="Product" 
+                    <img
+                      src={productImageCheck.imageUrl}
+                      alt="Product"
                       className="w-20 h-20 object-cover rounded-lg border-2 border-green-300"
                     />
                     <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-1">
@@ -387,7 +406,7 @@ export default function ImportPage() {
                       CHƯA CÓ ẢNH SẢN PHẨM
                     </div>
                   </div>
-                  
+
                   {/* Large Capture Button */}
                   <button
                     onClick={() => fileInputRef.current?.click()}
@@ -395,7 +414,7 @@ export default function ImportPage() {
                   >
                     📷 CHỤP ẢNH MẪU
                   </button>
-                  
+
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -404,7 +423,7 @@ export default function ImportPage() {
                     onChange={handleFileCapture}
                     className="hidden"
                   />
-                  
+
                   <div className="text-gray-600 mt-3">
                     Bác chụp giúp cháu một tấm ảnh nhé
                   </div>
@@ -420,9 +439,9 @@ export default function ImportPage() {
                 ẢNH ĐÃ CHỤP
               </label>
               <div className="relative">
-                <img 
-                  src={capturedImage} 
-                  alt="Captured" 
+                <img
+                  src={capturedImage}
+                  alt="Captured"
                   className="w-full h-48 object-cover rounded-lg border-2 border-blue-300"
                 />
                 <button
